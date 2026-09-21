@@ -1,4 +1,23 @@
-#define SIMULATOR_BUILD 1
+////////////////////////////////////////////////////////////////////////////////
+// TinyBasic Plus - eMBee TWO Firmware Fork
+////////////////////////////////////////////////////////////////////////////////
+//
+// Authors: 
+//    Gordon Brandly (Tiny Basic for 68000)
+//    Mike Field (Arduino Basic)
+//    Scott Lawrence (TinyBasic Plus)
+//    Matthew Begg (eMBee TWO Custom Firmware & OLED/Keypad Drivers)
+//
+// License: MIT License (see LICENSE file for full text)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software.
+////////////////////////////////////////////////////////////////////////////////
+
+#define SIMULATOR_BUILD 0
 
 #include <Arduino.h>
 #include <SSD1306Ascii.h>
@@ -11,139 +30,7 @@
 SSD1306AsciiWire oled;
 
 
-////////////////////////////////////////////////////////////////////////////////
-// TinyBasic Plus
-////////////////////////////////////////////////////////////////////////////////
-//
-// Authors: 
-//    Gordon Brandly (Tiny Basic for 68000)
-//    Mike Field <hamster@snap.net.nz> (Arduino Basic) (port to Arduino)
-//    Scott Lawrence <yorgle@gmail.com> (TinyBasic Plus) (features, etc)
-//
-// Contributors:
-//          Brian O'Dell <megamemnon@megamemnon.com> (INPUT)
-//    (full list tbd)
-
-//  For full history of Tiny Basic, please see the wikipedia entry here:
-//    https://en.wikipedia.org/wiki/Tiny_BASIC
-
-// LICENSING NOTES:
-//    Mike Field based his C port of Tiny Basic on the 68000 
-//    Tiny BASIC which carried the following license:
-/*
-******************************************************************
-*                                                                *
-*               Tiny BASIC for the Motorola MC68000              *
-*                                                                *
-* Derived from Palo Alto Tiny BASIC as published in the May 1976 *
-* issue of Dr. Dobb's Journal.  Adapted to the 68000 by:         *
-*       Gordon Brandly                                           *
-*       12147 - 51 Street                                        *
-*       Edmonton AB  T5W 3G8                                     *
-*       Canada                                                   *
-*       (updated mailing address for 1996)                       *
-*                                                                *
-* This version is for MEX68KECB Educational Computer Board I/O.  *
-*                                                                *
-******************************************************************
-*    Copyright (C) 1984 by Gordon Brandly. This program may be   *
-*    freely distributed for personal use only. All commercial    *
-*                      rights are reserved.                      *
-******************************************************************
-*/
-//    ref: http://members.shaw.ca:80/gbrandly/68ktinyb.html
-//
-//    However, Mike did not include a license of his own for his
-//    version of this.  
-//    ref: http://hamsterworks.co.nz/mediawiki/index.php/Arduino_Basic
-//
-//    From discussions with him, I felt that the MIT license is
-//    the most applicable to his intent.
-//
-//    I am in the process of further determining what should be
-//    done wrt licensing further.  This entire header will likely
-//    change with the next version 0.16, which will hopefully nail
-//    down the whole thing so we can get back to implementing
-//    features instead of licenses.  Thank you for your time.
-
 #define kVersion "v0.1"
-
-// v0.15: 2018-06-23
-//      Integrating some contributions
-//      Corrected some of the #ifdef nesting atop this page
-//      Licensing issues beginning to be addressed
-
-// v0.14: 2013-11-07
-//      Modified Input command to accept an expression using getn()
-//      Syntax is "input x" where x is any variable
-//      NOTE: This only works for numbers, expressions. not strings.
-//
-// v0.13: 2013-03-04
-//      Support for Arduino 1.5 (SPI.h included, additional changes for DUE support)
-//
-// v0.12: 2013-03-01
-//      EEPROM load and save routines added: EFORMAT, ELIST, ELOAD, ESAVE, ECHAIN
-//      added EAUTORUN option (chains to EEProm saved program on startup)
-//      Bugfixes to build properly on non-arduino systems (PROGMEM #define workaround)
-//      cleaned up a bit of the #define options wrt TONE
-//
-// v0.11: 2013-02-20
-//      all display strings and tables moved to PROGMEM to save space
-//      removed second serial
-//      removed pinMode completely, autoconf is explicit
-//      beginnings of EEPROM related functionality (new,load,save,list)
-//
-// v0.10: 2012-10-15
-//      added kAutoConf, which eliminates the "PINMODE" statement.
-//      now, DWRITE,DREAD,AWRITE,AREAD automatically set the PINMODE appropriately themselves.
-//      should save a few bytes in your programs.
-//
-// v0.09: 2012-10-12
-//      Fixed directory listings.  FILES now always works. (bug in the SD library)
-//      ref: http://arduino.cc/forum/index.php/topic,124739.0.html
-//      fixed filesize printouts (added printUnum for unsigned numbers)
-//      #defineable baud rate for slow connection throttling
-//e
-// v0.08: 2012-10-02
-//      Tone generation through piezo added (TONE, TONEW, NOTONE)
-//
-// v0.07: 2012-09-30
-//      Autorun buildtime configuration feature
-//
-// v0.06: 2012-09-27
-//      Added optional second serial input, used for an external keyboard
-//
-// v0.05: 2012-09-21
-//      CHAIN to load and run a second file
-//      RND,RSEED for random stuff
-//      Added "!=" for "<>" synonym
-//      Added "END" for "STOP" synonym (proper name for the functionality anyway)
-//
-// v0.04: 2012-09-20
-//      DELAY ms   - for delaying
-//      PINMODE <pin>, INPUT|IN|I|OUTPUT|OUT|O
-//      DWRITE <pin>, HIGH|HI|1|LOW|LO|0
-//      AWRITE <pin>, [0..255]
-//      fixed "save" appending to existing files instead of overwriting
-// 	Updated for building desktop command line app (incomplete)
-//
-// v0.03: 2012-09-19
-//	Integrated Jurg Wullschleger whitespace,unary fix
-//	Now available through github
-//	Project renamed from "Tiny Basic in C" to "TinyBasic Plus"
-//	   
-// v0.02b: 2012-09-17  Scott Lawrence <yorgle@gmail.com>
-// 	Better FILES listings
-//
-// v0.02a: 2012-09-17  Scott Lawrence <yorgle@gmail.com>
-// 	Support for SD Library
-// 	Added: SAVE, FILES (mostly works), LOAD (mostly works) (redirects IO)
-// 	Added: MEM, ? (PRINT)
-// 	Quirk:  "10 LET A=B+C" is ok "10 LET A = B + C" is not.
-// 	Quirk:  INPUT seems broken?
-
-// IF testing with Visual C, this needs to be the first thing in the file.
-//#include "stdafx.h"
 
 char eliminateCompileErrors = 1;  // fix to suppress arduino build errors
 
@@ -2098,7 +1985,7 @@ void setup()
     inStream = kStreamFile;
     inhibitOutput = true;
     runAfterLoad = true;
-  }
+  } 
 #endif /* ENABLE_AUTORUN */
 
 #endif /* ENABLE_FILEIO */
@@ -2118,7 +2005,7 @@ void setup()
 #endif /* ENABLE_EEPROM */
 
 #endif /* ARDUINO */
-}
+} 
 
 
 /***********************************************************/
