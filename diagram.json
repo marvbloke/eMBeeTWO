@@ -1,22 +1,26 @@
 {
   "version": 1,
-  "author": "Anonymous maker",
+  "author": "Matthew Begg",
   "editor": "wokwi",
   "parts": [
     { "type": "wokwi-arduino-nano", "id": "nano", "top": 0, "left": 0, "attrs": {} },
-    {
-      "type": "board-ssd1306",
-      "id": "oled1",
-      "top": 127.94,
-      "left": -18.97,
-      "attrs": { "i2cAddress": "0x3c" }
+    { "type": "board-ssd1306", "id": "oled", "top": -120, "left": 180, "attrs": {} },
+    { 
+      "type": "wokwi-at24c256", 
+      "id": "eeprom", 
+      "top": 40, 
+      "left": 180, 
+      "attrs": { "address": "0x50" } 
     }
   ],
   "connections": [
-    [ "nano:3.3V", "oled1:VCC", "green", [ "v0" ] ],
-    [ "nano:GND.1", "oled1:GND", "black", [ "v0" ] ],
-    [ "nano:A5", "oled1:SCL", "green", [ "v0" ] ],
-    [ "nano:A4", "oled1:SDA", "green", [ "v0" ] ]
-  ],
-  "dependencies": {}
+    [ "nano:GND", "oled:GND", "black", [ "v0" ] ],
+    [ "nano:5V", "oled:VCC", "red", [ "v0" ] ],
+    [ "nano:A4", "oled:SDA", "blue", [ "v0" ] ],
+    [ "nano:A5", "oled:SCL", "yellow", [ "v0" ] ],
+    [ "nano:GND", "eeprom:GND", "black", [ "v0" ] ],
+    [ "nano:5V", "eeprom:VCC", "red", [ "v0" ] ],
+    [ "nano:A4", "eeprom:SDA", "blue", [ "v0" ] ],
+    [ "nano:A5", "eeprom:SCL", "yellow", [ "v0" ] ]
+  ]
 }
