@@ -40,22 +40,12 @@ SSD1306AsciiWire oled;
 // Stream Selection
 enum {
   kStreamSerial = 0,
-  kStreamEEProm,
-  kStreamExtEEProm
+  kStreamEEProm,        // Internal EEPROM stream
+  kStreamExtEEProm     // External I2C EEPROM stream
 };
 static unsigned char inStream = kStreamSerial;
 static unsigned char outStream = kStreamSerial;
 static int eepos = 0;
-
-// Keypad Modes
-enum KeypadMode {
-  MODE_N = 0, // Numeric / Primary Mode
-  MODE_K,     // Keyword Mode
-  MODE_A,     // Alpha A-L Mode
-  MODE_M,     // Alpha M-X Mode
-  MODE_S      // Symbol / Y-Z Mode
-};
-static KeypadMode currentKeypadMode = MODE_N;
 
 // ASCII Definitions
 #define CR      '\r'
@@ -227,153 +217,6 @@ static void outchar(unsigned char c);
 static void ignore_blanks(void) {
   while(*txtpos == SPACE || *txtpos == TAB) txtpos++;
 }
-
-// --- 4x4 Capacitive Touch Matrix Hardware Driver ---
-const uint8_t rowPins[4] = {8, 9, 10, 11}; // PB0 - PB3 (Drive Rows)
-const uint8_t colPins[4] = {2, 3, 4, 5};   // PD2 - PD5 (Sense Cols)
-
-uint16_t touchBaseline[4][4];
-#define TOUCH_THRESHOLD 12 // Sensitivity delta threshold
-
-uint16_t scanTouchCell(uint8_t r, uint8_t c) {
-  uint16_t cycles = 0;
-  uint8_t rPin = rowPins[r];
-  uint8_t cPin = colPins[c];
-
-  // Discharge lines
-  pinMode(rPin, OUTPUT); digitalWrite(rPin, LOW);
-  pinMode(cPin, OUTPUT); digitalWrite(cPin, LOW);
-  delayMicroseconds(5);
-
-  // Charge transfer pulse sequence
-  for (uint8_t i = 0; i < 16; i++) {
-    digitalWrite(rPin, HIGH);
-    pinMode(cPin, INPUT);
-    if (digitalRead(cPin) == HIGH) cycles++;
-    pinMode(cPin, OUTPUT);
-    digitalWrite(cPin, LOW);
-  }
-  return cycles;
-}
-
-void initCapacitiveTouch() {
-  for (uint8_t r = 0; r < 4; r++) {
-    for (uint8_t c = 0; c < 4; c++) {
-      touchBaseline[r][c] = scanTouchCell(r, c);
-    }
-  }
-}
-
-// Keyword strings mapped to 4x3 grid for 'K' Mode
-const char* const kModeStrings[4][3] = {
-  { "CLS",   "FOR ",   "GOSUB " },
-  { "GOTO ",  "IF ",    "INPUT " },
-  { "LIST",  "NEW",    "NEXT "  },
-  { "PRINT ", "RETURN", "RUN"    }
-};
-
-// Character matrices for 'A', 'M', and 'S' Modes
-const char aModeMap[4][3] = {
-  { 'A', 'B', 'C' },
-  { 'D', 'E', 'F' },
-  { 'G', 'H', 'I' },
-  { 'J', 'K', 'L' }
-};
-
-const char mModeMap[4][3] = {
-  { 'M', 'N', 'O' },
-  { 'P', 'Q', 'R' },
-  { 'S', 'T', 'U' },
-  { 'V', 'W', 'X' }
-};
-
-const char sModeMap[4][3] = {
-  { 'Y', 'Z', '"' },
-  { '+', '-', '*' },
-  { '/', '=', ':' },
-  { '<', '>', ';' }
-};
-
-// Scan Keypad and execute Mode Rules logic
-// Populates activeString buffer if keyword string emitted
-bool scanKeypadInput(char &singleChar, const char* &outStr) {
-  singleChar = 0;
-  outStr = NULL;
-
-  for (uint8_t r = 0; r < 4; r++) {
-    for (uint8_t c = 0; c < 4; c++) {
-      uint16_t val = scanTouchCell(r, c);
-      if (val > (touchBaseline[r][c] + TOUCH_THRESHOLD)) {
-        delay(25); // Debounce
-
-        // Anchor Column 3 (Right Column Controls)
-        if (c == 3) {
-          if (r == 0) singleChar = CTRLH; // DEL
-          else if (r == 1) {             // ENT
-            singleChar = NL;
-            currentKeypadMode = MODE_N;  // Rule 1: ENT resets to N mode
-          } 
-          else if (r == 2) {             // MODE Key
-            currentKeypadMode = (KeypadMode)((currentKeypadMode + 1) % 5);
-            return false;
-          } 
-          else if (r == 3) {             // SPC
-            if (currentKeypadMode == MODE_N) {
-              currentKeypadMode = MODE_K; // Rule 2: SPC in N mode jumps to K mode
-              return false;
-            } else {
-              singleChar = SPACE;
-            }
-          }
-          return true;
-        }
-
-        // Active Mode Selection for Columns 0-2
-        switch (currentKeypadMode) {
-        case MODE_N:
-          if (r == 0 && c == 0) singleChar = '1';
-          else if (r == 0 && c == 1) singleChar = '2';
-          else if (r == 0 && c == 2) singleChar = '3';
-          else if (r == 1 && c == 0) singleChar = '4';
-          else if (r == 1 && c == 1) singleChar = '5';
-          else if (r == 1 && c == 2) singleChar = '6';
-          else if (r == 2 && c == 0) singleChar = '7';
-          else if (r == 2 && c == 1) singleChar = '8';
-          else if (r == 2 && c == 2) singleChar = '9';
-          else if (r == 3 && c == 0) singleChar = '.';
-          else if (r == 3 && c == 1) singleChar = '0';
-          else if (r == 3 && c == 2) singleChar = ',';
-          break;
-
-        case MODE_K:
-          outStr = kModeStrings[r][c];
-          currentKeypadMode = MODE_N; // Rule 3: Keyword entry returns to N mode
-          break;
-
-        case MODE_A:
-          singleChar = aModeMap[r][c];
-          break;
-
-        case MODE_M:
-          singleChar = mModeMap[r][c];
-          break;
-
-        case MODE_S:
-          singleChar = sModeMap[r][c];
-          if (singleChar != 'Y' && singleChar != 'Z') {
-            currentKeypadMode = MODE_N; // Rule 4: Symbol entry (not Y/Z) returns to N mode
-          }
-          break;
-        }
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Global buffer for multi-char string injection (for Keywords)
-static const char* activeStringPtr = NULL;
 
 // --- External I2C EEPROM (AT24C256) Drivers ---
 void extEEPROM_writeByte(uint16_t addr, uint8_t data) {
@@ -566,50 +409,13 @@ void printmsg(const unsigned char *msg) {
   printmsgNoNL(msg);
   line_terminator();
 }
-// --- Line Entry & Screen Helpers ---
-
-// Render inverted cursor at current OLED position
-// Displays ' ' (space) for Serial input, or mode letter [N, K, A, M, S] for Keypad input
-void drawModeCursor(bool isSerialInput = false) {
-  char modeChar = ' ';
-
-  if (!isSerialInput) {
-    switch (currentKeypadMode) {
-      case MODE_N: modeChar = 'N'; break;
-      case MODE_K: modeChar = 'K'; break;
-      case MODE_A: modeChar = 'A'; break;
-      case MODE_M: modeChar = 'M'; break;
-      case MODE_S: modeChar = 'S'; break;
-    }
-  }
-
-  // Save cursor coordinates
-  int col = oled.col();
-  int row = oled.row();
-
-  // Print inverted block character
-  oled.setInvertMode(true);
-  oled.write(modeChar);
-  oled.setInvertMode(false);
-
-  // Restore cursor position so next character overwrites the block
-  oled.setCursor(col, row);
-}
 
 static void getln(char prompt) {
   outchar(prompt);
   txtpos = program_end + sizeof(LINENUM);
 
   while(1) {
-    drawModeCursor(false); // Draw active mode cursor [N, K, A, M, S] while waiting
     char c = inchar();
-    
-    // Clear cursor block position before rendering character output
-    int col = oled.col();
-    int row = oled.row();
-    oled.print(' ');
-    oled.setCursor(col, row);
-
     switch(c) {
     case NL:
     case CR:
@@ -795,6 +601,7 @@ static short int expression(void) {
 void loop() {
   unsigned char *start, *newEnd;
   unsigned char linelen;
+  boolean isDigital;
   int val;
 
   program_start = program;
@@ -810,7 +617,6 @@ void loop() {
 warmstart:
   current_line = 0;
   sp = program + sizeof(program);
-  currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
   printmsg(okmsg);
 
 prompt:
@@ -820,7 +626,6 @@ prompt:
     goto execline;
   }
 
-  currentKeypadMode = MODE_N; // Rule 1: Always start at prompt in N mode
   getln('>');
   toUppercaseBuffer();
   txtpos = program_end + sizeof(unsigned short);
@@ -1334,8 +1139,6 @@ void setup() {
   oled.setScrollMode(SCROLL_MODE_AUTO);
   oled.clear();
 
-  initCapacitiveTouch(); // Calibrate baseline capacitance on boot
-
   printmsg(initmsg);
 
   // Auto-run program stored in internal EEPROM if available
@@ -1350,23 +1153,7 @@ void setup() {
 } 
 
 static unsigned char breakcheck(void) {
-  // 1. Check Serial Port (Ctrl+C)
-  if(Serial.available() && Serial.read() == CTRLC) return 1;
-
-  // 2. Check Capacitive Matrix Chord: MODE (Row 2, Col 3) + SPC (Row 3, Col 3)
-  uint16_t modeVal = scanTouchCell(2, 3);
-  uint16_t spcVal  = scanTouchCell(3, 3);
-
-  if ((modeVal > (touchBaseline[2][3] + TOUCH_THRESHOLD)) &&
-      (spcVal  > (touchBaseline[3][3] + TOUCH_THRESHOLD))) {
-    // Wait until released to prevent repeat break re-triggers
-    while ((scanTouchCell(2, 3) > (touchBaseline[2][3] + TOUCH_THRESHOLD)) &&
-           (scanTouchCell(3, 3) > (touchBaseline[3][3] + TOUCH_THRESHOLD))) {
-      delay(10);
-    }
-    return 1; // Signal program break
-  }
-
+  if(Serial.available()) return Serial.read() == CTRLC;
   return 0;
 }
 
@@ -1384,47 +1171,10 @@ static int inchar() {
   case(kStreamSerial):
   default:
     while(1) {
-      // 1. Unspool remaining characters from active Keyword string
-      if (activeStringPtr != NULL && *activeStringPtr != '\0') {
-        char k = *activeStringPtr++;
-        if (*activeStringPtr == '\0') activeStringPtr = NULL;
-        return k;
-      }
-
-      // 2. Check Serial input
       if(Serial.available()) {
         v = Serial.read();
-        
-        // Render an inverted SPACE cursor for incoming Serial input
-        drawModeCursor(true);
-
         if (v >= 'a' && v <= 'z') v -= 32;
         return v;
-      }
-
-      // 3. Scan Capacitive Touch Matrix
-      char keyChar = 0;
-      const char* strOut = NULL;
-      if (scanKeypadInput(keyChar, strOut)) {
-        // Render active mode cursor [N, K, A, M, S] for touch input
-        drawModeCursor(false);
-
-        if (strOut != NULL) {
-          activeStringPtr = strOut;
-          char k = *activeStringPtr++;
-          if (*activeStringPtr == '\0') activeStringPtr = NULL;
-          return k;
-        } 
-        else if (keyChar != 0) {
-          // Wait for release before registering single keypress
-          while (scanTouchCell(0,0) > 0) {
-            char dummyChar; const char* dummyStr;
-            if (!scanKeypadInput(dummyChar, dummyStr)) break;
-            delay(10);
-          }
-          if (keyChar >= 'a' && keyChar <= 'z') keyChar -= 32;
-          return keyChar;
-        }
       }
     }
   }
