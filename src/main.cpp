@@ -35,6 +35,8 @@
 #define kVersion        "V0.1"
 #define kConsoleBaud    9600
 
+#define PIEZO_PIN       5 // Piezo wired to digital Pin 5 (PD5)
+
 SSD1306AsciiWire oled;
 
 // Stream Selection
@@ -119,6 +121,9 @@ const static unsigned char keywords[] PROGMEM = {
   'E','L','O','A','D'+0x80,
   'E','F','O','R','M','A','T'+0x80,
   'E','S','A','V','E'+0x80,
+  'T','O','N','E','W'+0x80,
+  'T','O','N','E'+0x80,
+  'N','O','T','O','N','E'+0x80,
   0
 };
 
@@ -129,6 +134,7 @@ enum {
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
   KW_END, KW_RSEED, KW_CHAIN,
   KW_ECHAIN, KW_ELIST, KW_ELOAD, KW_EFORMAT, KW_ESAVE,
+  KW_TONEW, KW_TONE, KW_NOTONE,
   KW_DEFAULT
 };
 
@@ -195,7 +201,6 @@ static unsigned char table_index;
 static LINENUM linenum;
 
 // PROGMEM Output Messages
-static const unsigned char okmsg[]            PROGMEM = "OK";
 static const unsigned char whatmsg[]          PROGMEM = "WHAT? ";
 static const unsigned char howmsg[]           PROGMEM = "HOW?";
 static const unsigned char sorrymsg[]         PROGMEM = "SORRY!";
@@ -226,6 +231,22 @@ static void outchar(unsigned char c);
 
 static void ignore_blanks(void) {
   while(*txtpos == SPACE || *txtpos == TAB) txtpos++;
+}
+
+// --- Sound & Audio Feedback Routines ---
+void soundKeyClick() {
+  tone(PIEZO_PIN, 2800, 3); // Short 3ms tactile click
+}
+
+void playTone(unsigned int freq, unsigned int duration, boolean wait) {
+  if (freq > 0) {
+    tone(PIEZO_PIN, freq, duration);
+    if (wait) {
+      delay(duration);
+    }
+  } else {
+    noTone(PIEZO_PIN);
+  }
 }
 
 // --- 4x4 Capacitive Touch Matrix Hardware Driver ---
@@ -566,6 +587,7 @@ void printmsg(const unsigned char *msg) {
   printmsgNoNL(msg);
   line_terminator();
 }
+
 // --- Line Entry & Screen Helpers ---
 
 // Render inverted cursor at current OLED position
@@ -811,7 +833,7 @@ warmstart:
   current_line = 0;
   sp = program + sizeof(program);
   currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
-  printmsg(okmsg);
+  // printmsg(okmsg);  <-- Removed to save vertical screen space
 
 prompt:
   if( triggerRun ){
@@ -940,12 +962,35 @@ interperateAtTxtpos:
     goto prompt;
 
   case KW_LIST:
-    linenum = testnum();
-    if(txtpos[0] != NL) goto qwhat;
-    list_line = findline();
-    while(list_line != program_end) printline();
-    goto warmstart;
+    {
+      LINENUM start_line = 0;
+      LINENUM end_line = 0xFFFF;
 
+      ignore_blanks();
+      if (*txtpos != NL && *txtpos != ':') {
+        start_line = testnum();
+        ignore_blanks();
+        if (*txtpos == ',') {
+          txtpos++;
+          ignore_blanks();
+          end_line = testnum();
+          ignore_blanks();
+        }
+      }
+
+      if (*txtpos != NL && *txtpos != ':') goto qwhat;
+
+      linenum = start_line;
+      list_line = findline();
+
+      while (list_line != program_end) {
+        LINENUM current_num = *((LINENUM *)list_line);
+        if (current_num > end_line) break;
+        printline();
+      }
+    }
+    goto run_next_statement;
+    
   case KW_CHAIN:
     expression_error = 0;
     val = expression();
@@ -991,6 +1036,34 @@ interperateAtTxtpos:
   case KW_CLS:
     oled.clear();
     oled.setCursor(0, 0);
+    goto run_next_statement;
+
+  // --- Sound & Piezo Commands ---
+  case KW_TONE:
+  case KW_TONEW:
+    {
+      boolean wait = (table_index == KW_TONEW);
+      short int freq, duration;
+
+      expression_error = 0;
+      freq = expression();
+      if (expression_error) goto qwhat;
+
+      ignore_blanks();
+      if (*txtpos != ',') goto qwhat;
+      txtpos++;
+      ignore_blanks();
+
+      expression_error = 0;
+      duration = expression();
+      if (expression_error) goto qwhat;
+
+      playTone((unsigned int)freq, (unsigned int)duration, wait);
+    }
+    goto run_next_statement;
+
+  case KW_NOTONE:
+    noTone(PIEZO_PIN);
     goto run_next_statement;
 
   // --- Internal AVR EEPROM Commands ---
@@ -1212,8 +1285,10 @@ inputagain:
       txtpos++;
       goto run_next_statement;
     }
-    if(*txtpos == NL) goto execnextline;
-
+    if(*txtpos == NL) {
+      line_terminator(); // Emit newline for parameterless PRINT
+      goto execnextline;
+    }
     while(1) {
       ignore_blanks();
       if(print_quoted_string()) { ; }
@@ -1397,6 +1472,7 @@ static int inchar() {
         
         // Render an inverted SPACE cursor for incoming Serial input
         drawModeCursor(true);
+        soundKeyClick(); // Fire keyclick audio feedback
 
         if (v >= 'a' && v <= 'z') v -= 32;
         return v;
@@ -1408,6 +1484,7 @@ static int inchar() {
       if (scanKeypadInput(keyChar, strOut)) {
         // Render active mode cursor [N, K, A, M, S] for touch input
         drawModeCursor(false);
+        soundKeyClick(); // Fire keyclick audio feedback
 
         if (strOut != NULL) {
           activeStringPtr = strOut;
