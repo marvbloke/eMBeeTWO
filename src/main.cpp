@@ -74,7 +74,7 @@ static KeypadMode currentKeypadMode = MODE_N;
 typedef unsigned short LINENUM;
 
 // Memory Buffers
-#define kRamSize (RAMEND - 1160)
+#define kRamSize (RAMEND - 1023)
 static unsigned char program[kRamSize];
 static unsigned char *txtpos, *list_line, *tmptxtpos;
 static unsigned char expression_error;
@@ -990,7 +990,7 @@ interperateAtTxtpos:
       }
     }
     goto run_next_statement;
-    
+
   case KW_CHAIN:
     expression_error = 0;
     val = expression();
@@ -1414,14 +1414,14 @@ void setup() {
   printmsg(initmsg);
 
   // Auto-run program stored in internal EEPROM if available
-  int val = EEPROM.read(0);
+  /* int val = EEPROM.read(0);
   if(val >= '0' && val <= '9') {
     program_end = program_start;
     inStream = kStreamEEProm;
     eepos = 0;
     inhibitOutput = true;
     runAfterLoad = true;
-  }
+  } */
 } 
 
 static unsigned char breakcheck(void) {
