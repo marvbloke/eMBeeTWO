@@ -86,6 +86,7 @@ static boolean triggerRun = false;
 
 // Keyword Table
 const static unsigned char keywords[] PROGMEM = {
+  'A','T'+0x80,
   'L','I','S','T'+0x80,
   'L','O','A','D'+0x80,
   'N','E','W'+0x80,
@@ -128,7 +129,7 @@ const static unsigned char keywords[] PROGMEM = {
 };
 
 enum {
-  KW_LIST = 0, KW_LOAD, KW_NEW, KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
+  KW_AT = 0, KW_LIST, KW_LOAD, KW_NEW, KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
   KW_NEXT, KW_LET, KW_IF, KW_GOTO, KW_GOSUB, KW_RETURN, KW_REM,
   KW_FOR, KW_INPUT, KW_PRINT, KW_POKE, KW_STOP, KW_BYE, KW_FILES,
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
@@ -1286,12 +1287,49 @@ inputagain:
       goto run_next_statement;
     }
     if(*txtpos == NL) {
-      line_terminator(); // Emit newline for parameterless PRINT
+      line_terminator(); 
       goto execnextline;
     }
     while(1) {
       ignore_blanks();
-      if(print_quoted_string()) { ; }
+
+      // --- Handle AT y,x inside PRINT ---
+      if ((txtpos[0] == 'A' || txtpos[0] == 'a') && 
+          (txtpos[1] == 'T' || txtpos[1] == 't') && 
+          (txtpos[2] == SPACE || txtpos[2] == TAB || (txtpos[2] >= '0' && txtpos[2] <= '9'))) {
+        
+        txtpos += 2; // Advance past "AT"
+        ignore_blanks();
+
+        short int atY, atX;
+        expression_error = 0;
+        atY = expression(); // Row (0 to 7)
+        if (expression_error) goto qwhat;
+
+        ignore_blanks();
+        if (*txtpos != ',') goto qwhat;
+        txtpos++; // Consume ','
+        ignore_blanks();
+
+        expression_error = 0;
+        atX = expression(); // Column (0 to 20)
+        if (expression_error) goto qwhat;
+
+        // Clamp to screen bounds (8 rows x 21 cols)
+        if (atY < 0) atY = 0; if (atY > 7) atY = 7;
+        if (atX < 0) atX = 0; if (atX > 20) atX = 20;
+
+        oled.setCursor(atX * 6, atY);
+
+        ignore_blanks();
+        // Consume separator (; or ,) after coordinates if present
+        if (*txtpos == ';' || *txtpos == ',') {
+          txtpos++;
+        }
+        
+        continue; // <-- FIX 1: Skip bottom checks and process the next item (e.g. "SCORE:")
+      }
+      else if(print_quoted_string()) { ; }
       else if(*txtpos == '"' || *txtpos == '\'') goto qwhat;
       else {
         short int e;
@@ -1301,11 +1339,16 @@ inputagain:
         printnum(e);
       }
 
+      // --- Separator Checks ---
       if(*txtpos == ',') txtpos++;
       else if(txtpos[0] == ';' && (txtpos[1] == NL || txtpos[1] == ':')) {
         txtpos++;
         break;
-      } else if(*txtpos == NL || *txtpos == ':') {
+      } 
+      else if(*txtpos == ';') {
+        txtpos++; // <-- FIX 2: Properly consume intermediate semicolons!
+      }
+      else if(*txtpos == NL || *txtpos == ':') {
         line_terminator();
         break;
       } else goto qwhat;
