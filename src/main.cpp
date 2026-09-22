@@ -1561,7 +1561,6 @@ inchar_loadfinish:
 }
 
 static void outchar(unsigned char c) {
-  // Output redirection to internal EEPROM during ESAVE
   if (outStream == kStreamEEProm) {
     EEPROM.write(eepos++, c);
     return;
@@ -1574,22 +1573,46 @@ static void outchar(unsigned char c) {
 
   if (c == '\r') return;
   else if (c == '\n') {
-    oled.println();
 #if SIMULATOR_BUILD
     if (oled.row() >= 7) {
       oled.clear();
       oled.setCursor(0, 0);
-      return;
+    } else {
+      oled.println();
     }
+#else
+    oled.println();
 #endif
   } 
   else if (c == '\b' || c == 0x7F) {
     int col = oled.col();
-    if (col >= 5) { 
-      oled.setCursor(col - 5, oled.row());
+    int row = oled.row();
+
+    if (col >= 6) { 
+      oled.setCursor(col - 6, row);
       oled.print(' ');
-      oled.setCursor(col - 5, oled.row());
+      oled.setCursor(col - 6, row);
+    } 
+    else if (row > 0) {
+      oled.setCursor(120, row - 1);
+      oled.print(' ');
+      oled.setCursor(120, row - 1);
     }
   } 
-  else oled.write(c);
+  else {
+    // --- Wrap Check ---
+    if (oled.col() >= 120) {
+#if SIMULATOR_BUILD
+      if (oled.row() >= 7) {
+        oled.clear();
+        oled.setCursor(0, 0);
+      } else {
+        oled.println();
+      }
+#else
+      oled.println();
+#endif
+    }
+    oled.write(c);
+  }
 }
