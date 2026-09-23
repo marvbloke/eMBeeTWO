@@ -87,6 +87,7 @@ static boolean triggerRun = false;
 // Keyword Table
 const static unsigned char keywords[] PROGMEM = {
   'A','T'+0x80,
+  'H','E','L','P'+0x80,
   'L','I','S','T'+0x80,
   'L','O','A','D'+0x80,
   'N','E','W'+0x80,
@@ -129,7 +130,7 @@ const static unsigned char keywords[] PROGMEM = {
 };
 
 enum {
-  KW_AT = 0, KW_LIST, KW_LOAD, KW_NEW, KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
+  KW_AT = 0, KW_HELP, KW_LIST, KW_LOAD, KW_NEW, KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
   KW_NEXT, KW_LET, KW_IF, KW_GOTO, KW_GOSUB, KW_RETURN, KW_REM,
   KW_FOR, KW_INPUT, KW_PRINT, KW_POKE, KW_STOP, KW_BYE, KW_FILES,
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
@@ -218,6 +219,8 @@ static const unsigned char formattedmsg[] PROGMEM = "EEPROM FORMATTED";
 static const unsigned char noslotsmsg[]   PROGMEM = "NO SAVED SLOTS";
 static const unsigned char slotmsg[]      PROGMEM = "SLOT ";
 static const unsigned char usedmsg[]      PROGMEM = ": [USED]";
+
+static const unsigned char helpmsg1[] PROGMEM = "LIST RUN NEW CLS    HELP MEM PRINT AT   PEEK POKE TONE TONEWNOTONE IF GOTO GOSUBRETURN FOR NEXT     DELAY LOAD CHAIN    SAVE FILES FORMAT";
 
 // Forward Declarations
 static unsigned char *findline(void);
@@ -834,9 +837,11 @@ warmstart:
   current_line = 0;
   sp = program + sizeof(program);
   currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
+  outStream = kStreamSerial;
   // printmsg(okmsg);  <-- Removed to save vertical screen space
 
 prompt:
+  outStream = kStreamSerial;
   if( triggerRun ){
     triggerRun = false;
     current_line = program_start;
@@ -1037,6 +1042,12 @@ interperateAtTxtpos:
   case KW_CLS:
     oled.clear();
     oled.setCursor(0, 0);
+    goto run_next_statement;
+
+  case KW_HELP:
+    oled.clear();
+    oled.setCursor(0, 0);
+    printmsg(helpmsg1);
     goto run_next_statement;
 
   // --- Sound & Piezo Commands ---
@@ -1445,6 +1456,9 @@ static void line_terminator(void) {
 void setup() {
   Serial.begin(kConsoleBaud);
 
+  // Allow OLED onboard charge pump extra time to stabilize
+  delay(100);
+
   Wire.begin();
   Wire.setClock(400000L);
   oled.begin(&Adafruit128x64, I2C_ADDRESS);
@@ -1493,7 +1507,8 @@ static int inchar() {
   switch(inStream) {
   case(kStreamEEProm):
     v = EEPROM.read(eepos++);
-    if(v == '\0') {
+    if (v == '\r') v = EEPROM.read(eepos++); // Skip carriage return byte
+    if (v == '\0') {
       goto inchar_loadfinish;
     }
     if (v >= 'a' && v <= 'z') v -= 32;
@@ -1524,7 +1539,7 @@ static int inchar() {
       // 3. Scan Capacitive Touch Matrix
       char keyChar = 0;
       const char* strOut = NULL;
-      if (scanKeypadInput(keyChar, strOut)) {
+      /*if (scanKeypadInput(keyChar, strOut)) {
         // Render active mode cursor [N, K, A, M, S] for touch input
         drawModeCursor(false);
         soundKeyClick(); // Fire keyclick audio feedback
@@ -1545,7 +1560,7 @@ static int inchar() {
           if (keyChar >= 'a' && keyChar <= 'z') keyChar -= 32;
           return keyChar;
         }
-      }
+      }*/
     }
   }
 
@@ -1562,9 +1577,11 @@ inchar_loadfinish:
 
 static void outchar(unsigned char c) {
   if (outStream == kStreamEEProm) {
-    EEPROM.write(eepos++, c);
+    EEPROM.update(eepos++, c);
     return;
   }
+
+  if (inhibitOutput) return;
 
   if (c == '\n') Serial.write('\r');
   Serial.write(c);
