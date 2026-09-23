@@ -737,7 +737,7 @@ static short int expr4(void) {
     txtpos++;
 
     switch(f) {
-    case FUNC_PEEK:  return program[a];
+    case FUNC_PEEK:  return *((unsigned char *)a);
     case FUNC_ABS:   return (a < 0) ? -a : a;
     case FUNC_AREAD: pinMode(a, INPUT); return analogRead(a);                        
     case FUNC_DREAD: pinMode(a, INPUT); return digitalRead(a);
