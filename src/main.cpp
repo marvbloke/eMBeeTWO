@@ -1425,14 +1425,17 @@ inputagain:
     goto run_next_statement;
 
   case KW_RSEED:
-    {
-      short int value;
+    ignore_blanks();
+    // If no argument is provided before the newline or next statement ':'
+    if (*txtpos == NL || *txtpos == ':') {
+      randomSeed(millis());
+    } else {
       expression_error = 0;
-      value = expression();
-      if(expression_error) goto qwhat;
-      randomSeed(value);
-      goto run_next_statement;
+      val = expression();
+      if (expression_error) goto qwhat;
+      randomSeed(val);
     }
+    goto run_next_statement;
 
   default:
     break;
