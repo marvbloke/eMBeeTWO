@@ -1278,7 +1278,7 @@ interperateAtTxtpos:
 
 inputagain:
       tmptxtpos = txtpos;
-      getln('?');
+      getln(0);
       toUppercaseBuffer();
       txtpos = program_end + sizeof(unsigned short);
       ignore_blanks();
