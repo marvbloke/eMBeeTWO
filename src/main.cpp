@@ -34,6 +34,7 @@
 #define SLOT_SIZE       1024
 #define kVersion        "V0.1"
 #define kConsoleBaud    9600
+#define ASCII_EOF 0x04 // Ctrl+D / End of File
 
 #define PIEZO_PIN       5 // Piezo wired to digital Pin 5 (PD5)
 
@@ -43,7 +44,8 @@ SSD1306AsciiWire oled;
 enum {
   kStreamSerial = 0,
   kStreamEEProm,
-  kStreamExtEEProm
+  kStreamExtEEProm,
+  kStreamRECV
 };
 static unsigned char inStream = kStreamSerial;
 static unsigned char outStream = kStreamSerial;
@@ -87,6 +89,8 @@ static boolean triggerRun = false;
 // Keyword Table
 const static unsigned char keywords[] PROGMEM = {
   'A','T'+0x80,
+  'S','E','N','D'+0x80,
+  'R','E','C','V'+0x80,
   'H','E','L','P'+0x80,
   'L','I','S','T'+0x80,
   'L','O','A','D'+0x80,
@@ -130,7 +134,8 @@ const static unsigned char keywords[] PROGMEM = {
 };
 
 enum {
-  KW_AT = 0, KW_HELP, KW_LIST, KW_LOAD, KW_NEW, KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
+  KW_AT = 0, KW_SEND, KW_RECV, KW_HELP, KW_LIST, KW_LOAD, KW_NEW, 
+  KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
   KW_NEXT, KW_LET, KW_IF, KW_GOTO, KW_GOSUB, KW_RETURN, KW_REM,
   KW_FOR, KW_INPUT, KW_PRINT, KW_POKE, KW_STOP, KW_BYE, KW_FILES,
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
@@ -1437,6 +1442,73 @@ inputagain:
     }
     goto run_next_statement;
 
+  case KW_SEND:
+    ignore_blanks();
+    if (*txtpos == NL || *txtpos == ':') {
+      // 1. Bulk SEND (No arguments)
+      inhibitOutput = true; // Mute OLED drawing
+      list_line = program_start;
+      while (list_line != program_end) {
+        printline(); 
+      }
+      outchar(ASCII_EOF); 
+      inhibitOutput = false; // Restore OLED drawing
+      goto run_next_statement;
+    } else {
+      // 2. Variable/Expression SEND
+      expression_error = 0;
+      val = expression();
+      if (expression_error) goto qwhat;
+      
+      inhibitOutput = true; // Mute OLED drawing
+      printnum(val);     
+      line_terminator(); 
+      inhibitOutput = false; // Restore OLED drawing
+      goto run_next_statement;
+    }
+
+  case KW_RECV:
+    ignore_blanks();
+    if (*txtpos == NL || *txtpos == ':') {
+      // 1. Bulk RECV (No arguments)
+      inStream = kStreamRECV; 
+      inhibitOutput = true;   // Mute OLED so drawing delays don't drop incoming bytes!
+      goto warmstart;
+    } else {
+      // 2. Variable RECV (e.g., RECV A)
+      if (*txtpos < 'A' || *txtpos > 'Z') goto qwhat;
+      unsigned char var = *txtpos++;
+      ignore_blanks();
+      if (*txtpos != NL && *txtpos != ':') goto qwhat;
+
+      int received_val = 0;
+      boolean negative = false;
+      boolean started = false;
+
+      // Blocking loop waiting for an incoming number
+      while (1) {
+        if (breakcheck()) goto warmstart; // Allow user to escape with MODE+SPC
+        
+        if (Serial.available()) {
+          char c = Serial.read();
+          if (c == '-') {
+            negative = true;
+            started = true;
+          } else if (c >= '0' && c <= '9') {
+            received_val = received_val * 10 + (c - '0');
+            started = true;
+          } else if (started && (c == NL || c == CR || c == ' ' || c == ASCII_EOF)) {
+            break; // Number is completely received
+          }
+        }
+      }
+      
+      if (negative) received_val = -received_val;
+      ((short int *)variables_begin)[var - 'A'] = received_val;
+      
+      goto run_next_statement;
+    }
+
   default:
     break;
   }
@@ -1508,6 +1580,26 @@ static unsigned char breakcheck(void) {
 static int inchar() {
   int v;
   switch(inStream) {
+
+  case(kStreamRECV):
+    while(1) {
+      if (breakcheck()) {
+        inStream = kStreamSerial;
+        inhibitOutput = false;
+        return CTRLC; // Abort bulk transfer
+      }
+      if (Serial.available()) {
+        v = Serial.read();
+        if (v == ASCII_EOF) {
+          inStream = kStreamSerial;
+          inhibitOutput = false; // Restore screen output!
+          return NL;
+        }
+        if (v >= 'a' && v <= 'z') v -= 32;
+        return v;
+      }
+    }
+
   case(kStreamEEProm):
     v = EEPROM.read(eepos++);
     if (v == '\r') v = EEPROM.read(eepos++); // Skip carriage return byte
