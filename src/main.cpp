@@ -162,14 +162,15 @@ struct stack_gosub_frame {
 
 const static unsigned char func_tab[] PROGMEM = {
   'P','E','E','K'+0x80, 'A','B','S'+0x80, 'A','R','E','A','D'+0x80,
-  'D','R','E','A','D'+0x80, 'R','N','D'+0x80, 0
+  'D','R','E','A','D'+0x80, 'R','N','D'+0x80, 'I','N','K','E','Y'+0x80, 0
 };
 #define FUNC_PEEK    0
 #define FUNC_ABS     1
 #define FUNC_AREAD   2
 #define FUNC_DREAD   3
 #define FUNC_RND     4
-#define FUNC_UNKNOWN 5
+#define FUNC_INKEY   5
+#define FUNC_UNKNOWN 6
 
 const static unsigned char to_tab[] PROGMEM = { 'T','O'+0x80, 0 };
 const static unsigned char step_tab[] PROGMEM = { 'S','T','E','P'+0x80, 0 };
@@ -703,6 +704,47 @@ void printline() {
   line_terminator();
 }
 
+short int checkInkey(void) {
+  // 1. Check Serial input
+  if (Serial.available()) {
+    int v = Serial.read();
+    if (v >= 'a' && v <= 'z') v -= 32; // Uppercase conversion
+    soundKeyClick();
+    return (short int)v;
+  }
+
+  // 2. Unspool remaining characters from an active Keyword string (from 'K' mode)
+  if (activeStringPtr != NULL) {
+    char k = pgm_read_byte(activeStringPtr);
+    if (k != '\0') {
+      activeStringPtr++;
+      if (pgm_read_byte(activeStringPtr) == '\0') activeStringPtr = NULL;
+      return (short int)k;
+    }
+    activeStringPtr = NULL;
+  }
+
+  // 3. Scan Capacitive Touch Matrix
+  char keyChar = 0;
+  const char* strOut = NULL;
+  if (scanKeypadInput(keyChar, strOut)) {
+    soundKeyClick();
+    if (strOut != NULL) {
+      activeStringPtr = strOut;
+      char k = pgm_read_byte(activeStringPtr);
+      activeStringPtr++;
+      if (pgm_read_byte(activeStringPtr) == '\0') activeStringPtr = NULL;
+      return (short int)k;
+    } 
+    else if (keyChar != 0) {
+      if (keyChar >= 'a' && keyChar <= 'z') keyChar -= 32;
+      return (short int)keyChar;
+    }
+  }
+
+  return 0; // Nothing pressed
+}
+
 // --- Expression Evaluator ---
 static short int expr4(void) {
   ignore_blanks();
@@ -737,6 +779,13 @@ static short int expr4(void) {
     if(table_index == FUNC_UNKNOWN) goto expr4_error;
 
     unsigned char f = table_index;
+
+    // --- Special handling for parameterless INKEY ---
+    if (f == FUNC_INKEY) {
+      return checkInkey();
+    }
+
+    // Standard functions expecting (expression)
     if(*txtpos != '(') goto expr4_error;
 
     txtpos++;
@@ -1558,7 +1607,10 @@ void setup() {
 
 static unsigned char breakcheck(void) {
   // 1. Check Serial Port (Ctrl+C)
-  if(Serial.available() && Serial.read() == CTRLC) return 1;
+  if(Serial.available() && Serial.peek() == CTRLC) {
+    Serial.read(); // It is a break command, so consume it
+    return 1;
+  }
 
   // 2. Check Capacitive Matrix Chord: MODE (Row 2, Col 3) + SPC (Row 3, Col 3)
   uint16_t modeVal = scanTouchCell(2, 3);
