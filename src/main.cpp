@@ -1395,6 +1395,26 @@ inputagain:
         continue; // <-- FIX 1: Skip bottom checks and process the next item (e.g. "SCORE:")
       }
       else if(print_quoted_string()) { ; }
+
+      else if (txtpos[0] == 'C' && txtpos[1] == 'H' && txtpos[2] == 'R') {
+        txtpos += 3; // Advance past "CHR"
+        if (*txtpos == '$') txtpos++; // Consume optional '$'
+        ignore_blanks();
+        
+        if (*txtpos != '(') goto qwhat;
+        txtpos++; // Consume '('
+        
+        expression_error = 0;
+        short int charVal = expression(); // Evaluate the math inside the brackets
+        if (expression_error) goto qwhat;
+        
+        ignore_blanks();
+        if (*txtpos != ')') goto qwhat;
+        txtpos++; // Consume ')'
+        
+        outchar((unsigned char)charVal); // Print the raw ASCII character!
+      }
+
       else if(*txtpos == '"' || *txtpos == '\'') goto qwhat;
       else {
         short int e;
