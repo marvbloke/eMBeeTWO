@@ -1,0 +1,57 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C // Try 0x3C first (or 0x3D if needed)
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Sample 16x16 Space Invader Bitmap
+const unsigned char PROGMEM invader_bmp[] = {
+  0x03, 0xc0, 0x07, 0xe0, 0x0f, 0xf0, 0x1b, 0xd8, 
+  0x1f, 0xf8, 0x0a, 0xa0, 0x15, 0xa8, 0x2a, 0x54,
+  0x2a, 0x54, 0x15, 0xa8, 0x0a, 0xa0, 0x1f, 0xf8, 
+  0x1b, 0xd8, 0x0f, 0xf0, 0x07, 0xe0, 0x03, 0xc0
+};
+
+void setup() {
+  Serial.begin(9600);
+
+  // Initialize with 100kHz standard I2C clock for breadboard stability
+  Wire.begin();
+  Wire.setClock(100000L);
+
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 5V internally
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed!"));
+    for (;;); // Don't proceed, loop forever
+  }
+
+  // Clear the display buffer
+  display.clearDisplay();
+
+  // Draw a frame border around the screen
+  display.drawRect(0, 0, 128, 64, SSD1306_WHITE);
+
+  // Print text
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(10, 12);
+  display.println(F("eMBee TWO Test"));
+
+  display.setCursor(10, 26);
+  display.println(F("OLED Working!"));
+
+  // Draw the 16x16 Invader Bitmap at (x=80, y=38)
+  display.drawBitmap(80, 38, invader_bmp, 16, 16, SSD1306_WHITE);
+
+  // Push buffer contents to the physical glass
+  display.display();
+}
+
+void loop() {
+  // Nothing needed in loop
+}

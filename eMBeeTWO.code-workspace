@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "i2cScanner",
+			"path": "../../PlatformIO/Projects/i2cScanner"
+		}
+	],
+	"settings": {}
+}
