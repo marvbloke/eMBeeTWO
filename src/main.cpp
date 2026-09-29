@@ -75,8 +75,26 @@ static KeypadMode currentKeypadMode = MODE_N;
 
 typedef unsigned short LINENUM;
 
+struct stack_for_frame {
+  char frame_type;
+  char for_var;
+  short int terminal;
+  short int step;
+  unsigned char *current_line;
+  unsigned char *txtpos;
+};
+
+struct stack_gosub_frame {
+  char frame_type;
+  unsigned char *current_line;
+  unsigned char *txtpos;
+};
+
+#define STACK_SIZE (sizeof(struct stack_for_frame)*5)
+#define VAR_SIZE sizeof(short int)
+
 // Memory Buffers
-#define kRamSize (RAMEND - 1023)
+#define kRamSize (1024 + (27 * VAR_SIZE) + STACK_SIZE)
 static unsigned char program[kRamSize];
 static unsigned char *txtpos, *list_line, *tmptxtpos;
 static unsigned char expression_error;
@@ -146,21 +164,6 @@ enum {
   KW_DEFAULT
 };
 
-struct stack_for_frame {
-  char frame_type;
-  char for_var;
-  short int terminal;
-  short int step;
-  unsigned char *current_line;
-  unsigned char *txtpos;
-};
-
-struct stack_gosub_frame {
-  char frame_type;
-  unsigned char *current_line;
-  unsigned char *txtpos;
-};
-
 const static unsigned char func_tab[] PROGMEM = {
   'P','E','E','K'+0x80, 'A','B','S'+0x80, 'A','R','E','A','D'+0x80,
   'D','R','E','A','D'+0x80, 'R','N','D'+0x80, 'I','N','K','E','Y'+0x80,
@@ -195,9 +198,6 @@ const static unsigned char highlow_tab[] PROGMEM = {
 };
 #define HIGHLOW_HIGH    1
 #define HIGHLOW_UNKNOWN 4
-
-#define STACK_SIZE (sizeof(struct stack_for_frame)*5)
-#define VAR_SIZE sizeof(short int)
 
 // Interpreter State Variables
 static unsigned char *stack_limit;
@@ -266,11 +266,11 @@ void playTone(unsigned int freq, unsigned int duration, boolean wait) {
 const uint8_t rowPins[4] = {8, 9, 10, 11}; // PB0 - PB3 (Drive Rows)
 const uint8_t colPins[4] = {2, 3, 4, 5};   // PD2 - PD5 (Sense Cols)
 
-uint16_t touchBaseline[4][4];
+uint8_t touchBaseline[4][4];
 #define TOUCH_THRESHOLD 12 // Sensitivity delta threshold
 
-uint16_t scanTouchCell(uint8_t r, uint8_t c) {
-  uint16_t cycles = 0;
+uint8_t scanTouchCell(uint8_t r, uint8_t c) {
+  uint8_t cycles = 0;
   uint8_t rPin = rowPins[r];
   uint8_t cPin = colPins[c];
 
@@ -298,34 +298,39 @@ void initCapacitiveTouch() {
   }
 }
 
-// Keyword strings mapped to 4x3 grid for 'K' Mode
-const char* const kModeStrings[4][3] = {
-  { "CLS",   "FOR ",   "GOSUB " },
-  { "GOTO ",  "IF ",    "INPUT " },
-  { "LIST",  "NEW",    "NEXT "  },
-  { "PRINT ", "RETURN", "RUN"    }
+// 1. Character matrices safely in PROGMEM
+const char aModeMap[4][3] PROGMEM = {
+  { 'A', 'B', 'C' }, { 'D', 'E', 'F' }, { 'G', 'H', 'I' }, { 'J', 'K', 'L' }
 };
 
-// Character matrices for 'A', 'M', and 'S' Modes
-const char aModeMap[4][3] = {
-  { 'A', 'B', 'C' },
-  { 'D', 'E', 'F' },
-  { 'G', 'H', 'I' },
-  { 'J', 'K', 'L' }
+const char mModeMap[4][3] PROGMEM = {
+  { 'M', 'N', 'O' }, { 'P', 'Q', 'R' }, { 'S', 'T', 'U' }, { 'V', 'W', 'X' }
 };
 
-const char mModeMap[4][3] = {
-  { 'M', 'N', 'O' },
-  { 'P', 'Q', 'R' },
-  { 'S', 'T', 'U' },
-  { 'V', 'W', 'X' }
+const char sModeMap[4][3] PROGMEM = {
+  { 'Y', 'Z', '"' }, { '+', '-', '*' }, { '/', '=', ':' }, { '<', '>', ';' }
 };
 
-const char sModeMap[4][3] = {
-  { 'Y', 'Z', '"' },
-  { '+', '-', '*' },
-  { '/', '=', ':' },
-  { '<', '>', ';' }
+// 2. Keyword strings must be defined individually first...
+const char k_cls[] PROGMEM = "CLS";
+const char k_for[] PROGMEM = "FOR ";
+const char k_gosub[] PROGMEM = "GOSUB ";
+const char k_goto[] PROGMEM = "GOTO ";
+const char k_if[] PROGMEM = "IF ";
+const char k_input[] PROGMEM = "INPUT ";
+const char k_list[] PROGMEM = "LIST";
+const char k_new[] PROGMEM = "NEW";
+const char k_next[] PROGMEM = "NEXT ";
+const char k_print[] PROGMEM = "PRINT ";
+const char k_return[] PROGMEM = "RETURN";
+const char k_run[] PROGMEM = "RUN";
+
+// ...then placed into a PROGMEM array of pointers
+const char* const kModeStrings[4][3] PROGMEM = {
+  { k_cls, k_for, k_gosub },
+  { k_goto, k_if, k_input },
+  { k_list, k_new, k_next },
+  { k_print, k_return, k_run }
 };
 
 // Scan Keypad and execute Mode Rules logic
@@ -336,7 +341,7 @@ bool scanKeypadInput(char &singleChar, const char* &outStr) {
 
   for (uint8_t r = 0; r < 4; r++) {
     for (uint8_t c = 0; c < 4; c++) {
-      uint16_t val = scanTouchCell(r, c);
+      uint8_t val = scanTouchCell(r, c);
       if (val > (touchBaseline[r][c] + TOUCH_THRESHOLD)) {
         delay(25); // Debounce
 
@@ -380,22 +385,23 @@ bool scanKeypadInput(char &singleChar, const char* &outStr) {
           break;
 
         case MODE_K:
-          outStr = kModeStrings[r][c];
-          currentKeypadMode = MODE_N; // Rule 3: Keyword entry returns to N mode
+          // Read the pointer from PROGMEM, cast it back to a char pointer
+          outStr = (const char*)pgm_read_word(&kModeStrings[r][c]);
+          currentKeypadMode = MODE_N; 
           break;
 
         case MODE_A:
-          singleChar = aModeMap[r][c];
+          singleChar = pgm_read_byte(&aModeMap[r][c]);
           break;
 
         case MODE_M:
-          singleChar = mModeMap[r][c];
+          singleChar = pgm_read_byte(&mModeMap[r][c]);
           break;
 
         case MODE_S:
-          singleChar = sModeMap[r][c];
+          singleChar = pgm_read_byte(&sModeMap[r][c]);
           if (singleChar != 'Y' && singleChar != 'Z') {
-            currentKeypadMode = MODE_N; // Rule 4: Symbol entry (not Y/Z) returns to N mode
+            currentKeypadMode = MODE_N; 
           }
           break;
         }
@@ -631,7 +637,7 @@ void drawModeCursor(bool isSerialInput = false) {
   oled.setCursor(col, row);
 }
 
-static void getln(char prompt) {
+static bool getln(char prompt) {
   outchar(prompt);
   txtpos = program_end + sizeof(LINENUM);
 
@@ -646,12 +652,17 @@ static void getln(char prompt) {
     oled.setCursor(col, row);
 
     switch(c) {
+    case CTRLC:
+      line_terminator();
+      printmsg(breakmsg);
+      return true;
+
     case NL:
     case CR:
       currentKeypadMode = MODE_N; // <-- RESET MODE TO N ON ENTER
       line_terminator();
       txtpos[0] = NL;
-      return;
+      return false;
 
     case CTRLH: 
     case 0x7F:  
@@ -910,7 +921,7 @@ prompt:
   }
 
   // currentKeypadMode = MODE_N; // Rule 1: Always start at prompt in N mode
-  getln('>');
+  if (getln('>')) goto warmstart; // <-- UPDATE THIS: Reset safely if broken!
   toUppercaseBuffer();
   txtpos = program_end + sizeof(unsigned short);
 
@@ -1372,7 +1383,7 @@ inputagain:
       txtpos = tmptxtpos; // Restore txtpos pointing safely to program line's NL or ':'
       goto run_next_statement;
     }
-    
+
   case KW_PRINT:
   case KW_QMARK:
     if(*txtpos == ':' ) {
@@ -1664,8 +1675,8 @@ static unsigned char breakcheck(void) {
   }
 
   // 2. Check Capacitive Matrix Chord: MODE (Row 2, Col 3) + SPC (Row 3, Col 3)
-  uint16_t modeVal = scanTouchCell(2, 3);
-  uint16_t spcVal  = scanTouchCell(3, 3);
+  uint8_t modeVal = scanTouchCell(2, 3);
+  uint8_t spcVal  = scanTouchCell(3, 3);
 
   if ((modeVal > (touchBaseline[2][3] + TOUCH_THRESHOLD)) &&
       (spcVal  > (touchBaseline[3][3] + TOUCH_THRESHOLD))) {
@@ -1715,6 +1726,7 @@ static int inchar() {
   case(kStreamSerial):
   default:
     while(1) {
+      if (breakcheck()) return CTRLC; // <-- ADD THIS: Instantly catch CTRL+C or MODE+SPC
       // 1. Unspool remaining characters from active Keyword string
       if (activeStringPtr != NULL && *activeStringPtr != '\0') {
         char k = *activeStringPtr++;
@@ -1735,8 +1747,8 @@ static int inchar() {
       }
 
       // 3. Scan Capacitive Touch Matrix
-      char keyChar = 0;
-      const char* strOut = NULL;
+      // char keyChar = 0;
+      // const char* strOut = NULL;
       /*if (scanKeypadInput(keyChar, strOut)) {
         // Render active mode cursor [N, K, A, M, S] for touch input
         drawModeCursor(false);
