@@ -130,6 +130,7 @@ const static unsigned char keywords[] PROGMEM = {
   'T','O','N','E','W'+0x80,
   'T','O','N','E'+0x80,
   'N','O','T','O','N','E'+0x80,
+  'M','O','D','E'+0x80,
   0
 };
 
@@ -141,7 +142,7 @@ enum {
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
   KW_END, KW_RSEED, KW_CHAIN,
   KW_ECHAIN, KW_ELIST, KW_ELOAD, KW_EFORMAT, KW_ESAVE,
-  KW_TONEW, KW_TONE, KW_NOTONE,
+  KW_TONEW, KW_TONE, KW_NOTONE, KW_MODE,
   KW_DEFAULT
 };
 
@@ -162,7 +163,8 @@ struct stack_gosub_frame {
 
 const static unsigned char func_tab[] PROGMEM = {
   'P','E','E','K'+0x80, 'A','B','S'+0x80, 'A','R','E','A','D'+0x80,
-  'D','R','E','A','D'+0x80, 'R','N','D'+0x80, 'I','N','K','E','Y'+0x80, 0
+  'D','R','E','A','D'+0x80, 'R','N','D'+0x80, 'I','N','K','E','Y'+0x80,
+  'M','O','D','E'+0x80, 0
 };
 #define FUNC_PEEK    0
 #define FUNC_ABS     1
@@ -170,7 +172,8 @@ const static unsigned char func_tab[] PROGMEM = {
 #define FUNC_DREAD   3
 #define FUNC_RND     4
 #define FUNC_INKEY   5
-#define FUNC_UNKNOWN 6
+#define FUNC_MODE    6
+#define FUNC_UNKNOWN 7
 
 const static unsigned char to_tab[] PROGMEM = { 'T','O'+0x80, 0 };
 const static unsigned char step_tab[] PROGMEM = { 'S','T','E','P'+0x80, 0 };
@@ -645,6 +648,7 @@ static void getln(char prompt) {
     switch(c) {
     case NL:
     case CR:
+      currentKeypadMode = MODE_N; // <-- RESET MODE TO N ON ENTER
       line_terminator();
       txtpos[0] = NL;
       return;
@@ -784,6 +788,9 @@ static short int expr4(void) {
     if (f == FUNC_INKEY) {
       return checkInkey();
     }
+    if (f == FUNC_MODE) {
+      return (short int)currentKeypadMode;
+    }
 
     // Standard functions expecting (expression)
     if(*txtpos != '(') goto expr4_error;
@@ -890,7 +897,7 @@ void loop() {
 warmstart:
   current_line = 0;
   sp = program + sizeof(program);
-  currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
+  // currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
   outStream = kStreamSerial;
   // printmsg(okmsg);  <-- Removed to save vertical screen space
 
@@ -902,7 +909,7 @@ prompt:
     goto execline;
   }
 
-  currentKeypadMode = MODE_N; // Rule 1: Always start at prompt in N mode
+  // currentKeypadMode = MODE_N; // Rule 1: Always start at prompt in N mode
   getln('>');
   toUppercaseBuffer();
   txtpos = program_end + sizeof(unsigned short);
@@ -1320,6 +1327,15 @@ interperateAtTxtpos:
     }
     goto qhow;
 
+  case KW_MODE:
+    {
+      expression_error = 0;
+      val = expression();
+      if(expression_error || val < 0 || val > 4) goto qwhat; // 0=N, 1=K, 2=A, 3=M, 4=S
+      currentKeypadMode = (KeypadMode)val;
+    }
+    goto run_next_statement;
+
   case KW_INPUT:
     {
       unsigned char var;
@@ -1330,20 +1346,33 @@ interperateAtTxtpos:
       ignore_blanks();
       if(*txtpos != NL && *txtpos != ':') goto qwhat;
 
+      tmptxtpos = txtpos; // Save position pointing to NL or ':' BEFORE any retries!
+
 inputagain:
-      tmptxtpos = txtpos;
-      getln(0);
+      getln(0); // Keep promptless input
       toUppercaseBuffer();
-      txtpos = program_end + sizeof(unsigned short);
+      
+      // Temporarily point txtpos to user input buffer
+      unsigned char *userbuf = program_end + sizeof(unsigned short);
+      txtpos = userbuf;
       ignore_blanks();
+      
       expression_error = 0;
       value = expression();
-      if(expression_error) goto inputagain;
+
+      // Ensure user buffer reaches NL without invalid trailing text
+      ignore_blanks();
+      if(expression_error || *txtpos != NL) {
+        printmsg(whatmsg); // Print "WHAT?" on invalid input
+        goto inputagain;   // Re-prompt cleanly
+      }
+
       ((short int *)variables_begin)[var-'A'] = value;
-      txtpos = tmptxtpos;
+      
+      txtpos = tmptxtpos; // Restore txtpos pointing safely to program line's NL or ':'
       goto run_next_statement;
     }
-
+    
   case KW_PRINT:
   case KW_QMARK:
     if(*txtpos == ':' ) {
@@ -1381,8 +1410,10 @@ inputagain:
         if (expression_error) goto qwhat;
 
         // Clamp to screen bounds (8 rows x 21 cols)
-        if (atY < 0) atY = 0; if (atY > 7) atY = 7;
-        if (atX < 0) atX = 0; if (atX > 20) atX = 20;
+        if (atY < 0) atY = 0;
+        if (atY > 7) atY = 7;
+        if (atX < 0) atX = 0;
+        if (atX > 20) atX = 20;
 
         oled.setCursor(atX * 6, atY);
 
