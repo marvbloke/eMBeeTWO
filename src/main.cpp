@@ -921,7 +921,11 @@ prompt:
   }
 
   // currentKeypadMode = MODE_N; // Rule 1: Always start at prompt in N mode
-  if (getln('>')) goto warmstart; // <-- UPDATE THIS: Reset safely if broken!
+  if (getln('>')) {
+    inStream = kStreamSerial;  
+    inhibitOutput = false;     
+    goto warmstart;
+  }
   toUppercaseBuffer();
   txtpos = program_end + sizeof(unsigned short);
 
@@ -1360,7 +1364,7 @@ interperateAtTxtpos:
       tmptxtpos = txtpos; // Save position pointing to NL or ':' BEFORE any retries!
 
 inputagain:
-      getln(0); // Keep promptless input
+      if (getln(0)) goto warmstart; // <-- FIX: Jump to warmstart if getln returns true!
       toUppercaseBuffer();
       
       // Temporarily point txtpos to user input buffer
@@ -1578,7 +1582,7 @@ inputagain:
       goto run_next_statement;
     }
 
-  case KW_RECV:
+case KW_RECV:
     ignore_blanks();
     if (*txtpos == NL || *txtpos == ':') {
       // 1. Bulk RECV (No arguments)
@@ -1598,10 +1602,24 @@ inputagain:
 
       // Blocking loop waiting for an incoming number
       while (1) {
-        if (breakcheck()) goto warmstart; // Allow user to escape with MODE+SPC
-        
+        if (breakcheck()) {
+          inStream = kStreamSerial;  
+          inhibitOutput = false;     
+          printmsg(breakmsg);        
+          goto warmstart;            // Jump safely back to prompt
+        }
+
         if (Serial.available()) {
           char c = Serial.read();
+
+          // --- FIX: Check for Ctrl+C directly when reading serial ---
+          if (c == CTRLC) {
+            inStream = kStreamSerial;
+            inhibitOutput = false;
+            printmsg(breakmsg);
+            goto warmstart;
+          }
+
           if (c == '-') {
             negative = true;
             started = true;
@@ -1639,6 +1657,12 @@ static void line_terminator(void) {
   outchar(CR);
 }
 
+void setOledBrightness(uint8_t contrast) {
+  // contrast can range from 0 (dimmest) to 255 (brightest)
+  oled.ssd1306WriteCmd(0x81);
+  oled.ssd1306WriteCmd(contrast);
+}
+
 void setup() {
   Serial.begin(kConsoleBaud);
 
@@ -1650,6 +1674,7 @@ void setup() {
   oled.begin(&Adafruit128x64, I2C_ADDRESS);
   oled.setFont(lcd5x7);
   oled.setScrollMode(SCROLL_MODE_AUTO);
+  setOledBrightness(10);
   oled.clear();
 
   initCapacitiveTouch(); // Calibrate baseline capacitance on boot
@@ -1709,6 +1734,13 @@ static int inchar() {
           inhibitOutput = false; // Restore screen output!
           return NL;
         }
+
+        if (v == CTRLC) {
+          inStream = kStreamSerial;
+          inhibitOutput = false; // Un-mute the screen!
+          return CTRLC;
+        }
+
         if (v >= 'a' && v <= 'z') v -= 32;
         return v;
       }
