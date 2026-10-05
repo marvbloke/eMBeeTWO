@@ -908,6 +908,7 @@ void loop() {
 warmstart:
   current_line = 0;
   sp = program + sizeof(program);
+  oled.setInvertMode(false);
   // currentKeypadMode = MODE_N; // Rule 1: Reset to N mode on warmstart/prompt
   outStream = kStreamSerial;
   // printmsg(okmsg);  <-- Removed to save vertical screen space
@@ -1402,8 +1403,36 @@ inputagain:
     while(1) {
       ignore_blanks();
 
+      // --- Handle INVERSE n inside PRINT ---
+      if ((txtpos[0] == 'I' || txtpos[0] == 'i') && 
+          (txtpos[1] == 'N' || txtpos[1] == 'n') && 
+          (txtpos[2] == 'V' || txtpos[2] == 'v')) {
+        
+        txtpos += 3; // Advance past "INV"
+        if (txtpos[0] == 'E' || txtpos[0] == 'e') txtpos++; // Optional "ERSE"
+        if (txtpos[0] == 'R' || txtpos[0] == 'r') txtpos++;
+        if (txtpos[0] == 'S' || txtpos[0] == 's') txtpos++;
+        if (txtpos[0] == 'E' || txtpos[0] == 'e') txtpos++;
+        
+        ignore_blanks();
+
+        expression_error = 0;
+        short int invVal = expression(); // Evaluate 0 or 1
+        if (expression_error) goto qwhat;
+
+        oled.setInvertMode(invVal != 0); // Enable or disable inverted rendering!
+
+        ignore_blanks();
+        // Consume separator (; or ,) after modifier if present
+        if (*txtpos == ';' || *txtpos == ',') {
+          txtpos++;
+        }
+        
+        continue; // Process next item on the line
+      }
+
       // --- Handle AT y,x inside PRINT ---
-      if ((txtpos[0] == 'A' || txtpos[0] == 'a') && 
+      else if ((txtpos[0] == 'A' || txtpos[0] == 'a') && 
           (txtpos[1] == 'T' || txtpos[1] == 't') && 
           (txtpos[2] == SPACE || txtpos[2] == TAB || (txtpos[2] >= '0' && txtpos[2] <= '9'))) {
         
