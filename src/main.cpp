@@ -353,9 +353,56 @@ bool scanKeypadInput(char &singleChar, const char* &outStr) {
             currentKeypadMode = MODE_N;  // Rule 1: ENT resets to N mode
           } 
           else if (r == 2) {             // MODE Key
-            currentKeypadMode = (KeypadMode)((currentKeypadMode + 1) % 5);
-            return false;
-          } 
+            uint16_t asciiVal = 0;
+            uint8_t digitsEntered = 0;
+
+            // Block and scan while the MODE key is being held down
+            while (scanTouchCell(2, 3) > (touchBaseline[2][3] + TOUCH_THRESHOLD)) {
+              
+              // Scan the numeric pad zone (rows 0-3, cols 0-2)
+              for (uint8_t nr = 0; nr < 4; nr++) {
+                for (uint8_t nc = 0; nc < 3; nc++) {
+                  if (scanTouchCell(nr, nc) > (touchBaseline[nr][nc] + TOUCH_THRESHOLD)) {
+                    delay(25); // Debounce
+                    
+                    int8_t digit = -1;
+                    if (nr == 0 && nc == 0) digit = 1;
+                    else if (nr == 0 && nc == 1) digit = 2;
+                    else if (nr == 0 && nc == 2) digit = 3;
+                    else if (nr == 1 && nc == 0) digit = 4;
+                    else if (nr == 1 && nc == 1) digit = 5;
+                    else if (nr == 1 && nc == 2) digit = 6;
+                    else if (nr == 2 && nc == 0) digit = 7;
+                    else if (nr == 2 && nc == 1) digit = 8;
+                    else if (nr == 2 && nc == 2) digit = 9;
+                    else if (nr == 3 && nc == 1) digit = 0;
+
+                    if (digit != -1) {
+                      asciiVal = (asciiVal * 10) + digit;
+                      digitsEntered++;
+                      soundKeyClick(); // Tactile audio feedback only!
+                      
+                      // Wait for the digit key to be released before accepting the next
+                      while (scanTouchCell(nr, nc) > (touchBaseline[nr][nc] + TOUCH_THRESHOLD)) {
+                        delay(10);
+                      }
+                    }
+                  }
+                }
+              }
+              delay(10); // Keep the hold loop from thrashing
+            }
+
+            // MODE key has just been released.
+            if (digitsEntered > 0) {
+              singleChar = (char)(asciiVal & 0xFF); // Truncate cleanly into a standard char
+              return true; // Emit the calculated ASCII character
+            } else {
+              // No digits were entered, treat as a normal mode switch tap
+              currentKeypadMode = (KeypadMode)((currentKeypadMode + 1) % 5);
+              return false;
+            }
+          }
           else if (r == 3) {             // SPC
             if (currentKeypadMode == MODE_N) {
               currentKeypadMode = MODE_K; // Rule 2: SPC in N mode jumps to K mode
