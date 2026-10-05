@@ -1860,7 +1860,7 @@ static void outchar(unsigned char c) {
   } 
   else {
     // --- Wrap Check ---
-    if (oled.col() >= 120) {
+    if (oled.col() > 120) {
 #if SIMULATOR_BUILD
       if (oled.row() >= 7) {
         oled.clear();
