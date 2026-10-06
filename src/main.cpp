@@ -20,7 +20,7 @@
 // copies of the Software.
 ////////////////////////////////////////////////////////////////////////////////
 
-#define SIMULATOR_BUILD 1
+#define SIMULATOR_BUILD 0
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -1057,7 +1057,7 @@ qwhat:
   }
   line_terminator();
   goto warmstart; // Changed from goto prompt;
-  
+
 qsorry: 
   printmsg(sorrymsg);
   goto warmstart;
@@ -1085,7 +1085,7 @@ interperateAtTxtpos:
     expression_error = 0;
     val = expression();
     delay(val);
-    goto execnextline;
+    goto run_next_statement;
 
   case KW_FILES:
     cmd_FilesSlot();
@@ -1304,14 +1304,14 @@ interperateAtTxtpos:
   case KW_GOTO:
     expression_error = 0;
     linenum = expression();
-    if(expression_error || *txtpos != NL) goto qhow;
+    if(expression_error || (*txtpos != NL && *txtpos != ':')) goto qhow;
     current_line = findline();
     goto execline;
 
   case KW_GOSUB:
     expression_error = 0;
     linenum = expression();
-    if(!expression_error && *txtpos == NL) {
+    if(!expression_error && (*txtpos == NL || *txtpos == ':')) {
       struct stack_gosub_frame *f;
       if(sp + sizeof(struct stack_gosub_frame) < stack_limit) goto qsorry;
       sp -= sizeof(struct stack_gosub_frame);
@@ -1373,7 +1373,7 @@ interperateAtTxtpos:
       ignore_blanks();
       if(*txtpos != NL && *txtpos != ':') goto qwhat;
 
-      if(!expression_error && *txtpos == NL) {
+      if(!expression_error && (*txtpos == NL || *txtpos == ':')) {
         struct stack_for_frame *f;
         if(sp + sizeof(struct stack_for_frame) < stack_limit) goto qsorry;
         sp -= sizeof(struct stack_for_frame);
@@ -1474,7 +1474,7 @@ inputagain:
         if (*txtpos == ';' || *txtpos == ',') {
           txtpos++;
         }
-        
+        if (*txtpos == NL || *txtpos == ':') break;
         continue; // Process next item on the line
       }
 
@@ -1513,7 +1513,7 @@ inputagain:
         if (*txtpos == ';' || *txtpos == ',') {
           txtpos++;
         }
-        
+        if (*txtpos == NL || *txtpos == ':') break;
         continue; // <-- FIX 1: Skip bottom checks and process the next item (e.g. "SCORE:")
       }
       else if(print_quoted_string()) { ; }
@@ -1585,7 +1585,7 @@ inputagain:
 
   case KW_END:
   case KW_STOP:
-    if(txtpos[0] != NL) goto qwhat;
+    if(txtpos[0] != NL && txtpos[0] != ':') goto qwhat;
     current_line = program_end;
     goto execline;
 
