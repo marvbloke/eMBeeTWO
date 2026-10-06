@@ -1044,7 +1044,7 @@ prompt:
 
 qhow: 
   printmsg(howmsg);
-  goto prompt;
+  goto warmstart; // Changed from goto prompt;
 
 qwhat:  
   printmsgNoNL(whatmsg);
@@ -1056,8 +1056,8 @@ qwhat:
     *txtpos = tmp;
   }
   line_terminator();
-  goto prompt;
-
+  goto warmstart; // Changed from goto prompt;
+  
 qsorry: 
   printmsg(sorrymsg);
   goto warmstart;
