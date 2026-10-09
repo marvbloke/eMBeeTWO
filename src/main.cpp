@@ -539,24 +539,32 @@ void cmd_LoadSlot(uint8_t slot) {
 }
 
 void cmd_FilesSlot(void) {
-  uint8_t count = 0;
+  printmsg((const unsigned char *)PSTR("SLOTS 1-32:"));
+
   for (uint8_t slot = 1; slot <= 32; slot++) {
     uint16_t startAddr = (slot - 1) * SLOT_SIZE;
     uint8_t header = extEEPROM_readByte(startAddr);
-    
+
     if (header != 0xFF) {
-      printmsgNoNL(slotmsg);
+      // Slot USED: Print leading zero if needed, then the slot number
+      if (slot < 10) outchar('0');
       printnum(slot);
-      printmsg(usedmsg);
-      count++;
+    } else {
+      // Slot EMPTY: Print two dots
+      printmsgNoNL((const unsigned char *)PSTR(".."));
     }
-  }
-  if (count == 0) {
-    printmsg(noslotsmsg);
+
+    // Print a space after each item unless it's the end of a row (6 items/line)
+    if (slot % 6 == 0 || slot == 32) {
+      line_terminator();
+    } else {
+      outchar(' ');
+    }
   }
 }
 
 // --- Helper Functions ---
+
 static void scantable(const unsigned char *table) {
   int i = 0;
   table_index = 0;
