@@ -32,7 +32,7 @@
 #define I2C_ADDRESS     0x3C
 #define EEPROM_I2C_ADDR 0x50
 #define SLOT_SIZE       1024
-#define kVersion        "V0.1"
+#define kVersion        "V0.4"
 #define kConsoleBaud    9600
 #define ASCII_EOF 0x04 // Ctrl+D / End of File
 
@@ -829,6 +829,24 @@ static short int expr4(void) {
     return a;
   }
 
+  if(*txtpos == '@') {
+    short int idx;
+    txtpos++;
+    ignore_blanks();
+    if(*txtpos != '(') goto expr4_error;
+    txtpos++;
+    idx = expression();
+    if(*txtpos != ')') goto expr4_error;
+    txtpos++;
+    
+    // Verify index is positive and fits inside the free RAM gap
+    if (idx < 0 || idx >= (variables_begin - program_end)) goto expr4_error;
+
+    // Read byte from the downward-mapped address
+    unsigned char *addr = variables_begin - 1 - idx;
+    return *addr;
+  }
+
   if(txtpos[0] >= 'A' && txtpos[0] <= 'Z') {
     short int a;
     if(txtpos[1] < 'A' || txtpos[1] > 'Z') {
@@ -1280,6 +1298,34 @@ interperateAtTxtpos:
   case KW_DEFAULT:
     {
       short int value, *var;
+
+      ignore_blanks();
+      if (*txtpos == '@') {
+        txtpos++;
+        ignore_blanks();
+        if (*txtpos != '(') goto qwhat;
+        txtpos++;
+        expression_error = 0;
+        short int idx = expression();
+        if (expression_error || *txtpos != ')') goto qwhat;
+        txtpos++;
+        ignore_blanks();
+        if (*txtpos != '=') goto qwhat;
+        txtpos++;
+        ignore_blanks();
+        expression_error = 0;
+        value = expression();
+        if(expression_error || (*txtpos != NL && *txtpos != ':')) goto qwhat;
+
+        // Verify index is positive and fits inside the free RAM gap
+        if (idx < 0 || idx >= (variables_begin - program_end)) goto qsorry;
+
+        // Map address downwards from the variable table
+        unsigned char *addr = variables_begin - 1 - idx;
+        *addr = (unsigned char)value;
+        goto run_next_statement;
+      }
+
       if(*txtpos < 'A' || *txtpos > 'Z') goto qhow;
       var = (short int *)variables_begin + *txtpos - 'A';
       txtpos++;
