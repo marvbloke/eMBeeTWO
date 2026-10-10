@@ -217,7 +217,7 @@ static const unsigned char howmsg[]           PROGMEM = "HOW?";
 static const unsigned char sorrymsg[]         PROGMEM = "SORRY!";
 static const unsigned char initmsg[]          PROGMEM = "EMBEE TWO " kVersion;
 static const unsigned char memorymsg[]        PROGMEM = " BYTES RAM";
-static const unsigned char eeprommsg[]        PROGMEM = " BYTES INT EEPROM";
+//static const unsigned char eeprommsg[]        PROGMEM = " BYTES INT EEPROM";
 static const unsigned char breakmsg[]         PROGMEM = "BREAK!";
 static const unsigned char backspacemsg[]     PROGMEM = "\b \b";
 static const unsigned char spacemsg[]         PROGMEM = " ";
@@ -546,8 +546,8 @@ void cmd_FilesSlot(void) {
     uint8_t header = extEEPROM_readByte(startAddr);
 
     if (header != 0xFF) {
-      // Slot USED: Print leading zero if needed, then the slot number
-      if (slot < 10) outchar('0');
+      // Slot USED: Print a space if needed, then the slot number
+      if (slot < 10) outchar(' ');
       printnum(slot);
     } else {
       // Slot EMPTY: Print two dots
@@ -1165,8 +1165,8 @@ interperateAtTxtpos:
   case KW_MEM:
     printnum(variables_begin - program_end);
     printmsg(memorymsg);
-    printnum(E2END + 1);
-    printmsg(eeprommsg);
+    //printnum(E2END + 1);
+    //printmsg(eeprommsg);
     goto run_next_statement;
 
   case KW_NEW:
