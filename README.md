@@ -72,7 +72,7 @@ This fork of TinyBasic Plus is designed specifically for the eMBee TWO which is 
 - RETURN	- *return from a subroutine*
 
 ### Pin IO 
-- DELAY	timems*- wait (in milliseconds)*
+- DELAY	timems - *wait (in milliseconds)*
 - DWRITE pin,value - *set pin with a value (HIGH,HI,LOW,LO)*
 - AWRITE pin,value - *set pin with analog value (pwm) 0..255*
 - DREAD( pin ) - *get the value of the pin* 
@@ -80,9 +80,9 @@ This fork of TinyBasic Plus is designed specifically for the eMBee TWO which is 
 
 
 ### Sound
-- TONE freq,timems - play "freq" for "timems" milleseconds (1000 = 1 second)
-- TONEW freq,timems - same as above, but also waits for it to finish
-- NOTONE - stop playback of all playing tones
+- TONE freq,timems - *play "freq" for "timems" milleseconds (1000 = 1 second)*
+- TONEW freq,timems - *same as above, but also waits for it to finish*
+- NOTONE - *stop playback of all playing tones*
 
 ## Example programs
 
@@ -145,7 +145,7 @@ Workman Publishing, 1978.*
     240 IF K = 1 GOTO 70
     250 PRINT "FINAL EARNINGS: $"; E
     260 END
-### #3 - FIBONACCI
+### #3 - FIB
 
 Shows all numbers in the Fibonacci sequence.
 
@@ -208,6 +208,45 @@ Play a classic game of Battleships (one player only)
     390 ?AT 7,11;"YOU WIN!"
     400 END
 
+### #5 - LEMONADE
+
+Based on the classic Apple II Lemonade Stand game from 1979
+
+    10 CLS:?"LEMONADE STAND":?"PRESS KEY"
+    20 IF INKEY=0 GOTO 20
+    30 RSEED:C=200:D=1
+    40 CLS:?"DAY ";D;"  $";:V=C:GOSUB 330:?
+    50 W=RND(3):?"WEATHER: ";
+    60 IF W=0 ?"SUNNY"
+    70 IF W=1 ?"CLOUDY"
+    80 IF W=2 ?"HOT & DRY"
+    90 ?"COST: 2c/GLASS"
+    100 ?AT 4,0;"GLASSES?   ";:INPUT G:GOSUB 350
+    110 ?AT 4,0;"PRICE(c)?  ";:INPUT P:GOSUB 350
+    120 ?AT 4,0;"SIGNS 15c? ";:INPUT N
+    130 K=G*2+N*15:IF K<=C GOTO 150
+    140 ?AT 6,0;"NO MONEY!":DELAY 900:?AT 7,0;"         ":GOTO 100
+    150 C=C-K:CLS:?"SELLING..."
+    160 R=60:IF W=1 R=30
+    170 IF W=2 R=90
+    180 R=R-P*2+N*5:IF R<0 R=0
+    190 IF W=1 IF RND(100)<25 ?"STORM!":R=0:DELAY 900
+    200 M=0:IF G=0 GOTO 230
+    210 FOR J=1 TO G:IF RND(100)<R M=M+1
+    220 NEXT J
+    230 I=M*P:C=C+I:CLS:?"SOLD: ";M;"/";G
+    235 ?"OUT:$";:V=K:GOSUB 330:?
+    240 ?"IN: $";:V=I:GOSUB 330:?
+    250 ?"CASH:$";:V=C:GOSUB 330
+    260 ?AT 6,0;"PRESS KEY";
+    270 IF INKEY=0 GOTO 270
+    280 D=D+1:IF D<11 GOTO 40
+    290 CLS:?"GAME OVER!":?"FINAL:$";:V=C:GOSUB 330
+    300 END
+    330 M=V/100:E=V-M*100:?M;".";:IF E<10 ?"0";
+    340 ?E;:RETURN
+    350 ?AT 4,11;"          ";:RETURN
+
 ### #6 - SYNTH
 
 Write a small program, store it in EEPROM.  We'll show that variables don't
@@ -234,6 +273,45 @@ get erased when chaining happens
     170 GOTO 40
     180 IF V<4 V=V+1:M=M*2:?AT 3,8;V
     190 GOTO 40
+### #7 - TRADER
+
+Armed with \$150 in cash and saddled with a \$100 loan that gathers 10% interest every time you set sail, your goal is to build a trading empire across four distinct ports. Buy low and sell high on food, fuel, and gems while managing your inventory, staying ahead of compounding debt, and surviving the constant threat of pirates who will strip your cargo hold clean.
+
+    10 C=150:D=100:P=1:RSEED:FOR I=1 TO 6:@(I)=0:NEXT I
+    20 @(1)=RND(10)+5:@(2)=RND(30)+15:@(3)=RND(60)+40
+    30 CLS:?"PORT:";P;" $";C;" DBT:";D
+    40 ?"1.FOOD $";@(1);" INV:";@(4):?"2.FUEL $";@(2);" INV:";@(5):?"3.GEMS $";@(3);" INV:";@(6)
+    50 ?"1BUY 2SELL 3GO 4LOAN"
+    60 K=INKEY:IF K=49 GOTO 200
+    70 IF K=50 GOTO 300
+    80 IF K=51 GOTO 400
+    90 IF K=52 GOTO 500
+    100 GOTO 60
+    200 GOSUB 600
+    210 X=@(I)*Y:IF C<X GOTO 30
+    220 C=C-X:@(I+3)=@(I+3)+Y:GOTO 30
+    300 GOSUB 600
+    310 IF @(I+3)<Y GOTO 30
+    320 C=C+(@(I)*Y):@(I+3)=@(I+3)-Y:GOTO 30
+    400 P=P+1:IF P>4 P=1
+    410 D=D+(D/10)
+    420 IF RND(10)>7 ?AT 7,0;"PIRATES!";:TONEW 99,500:@(4)=0:@(5)=0:@(6)=0:DELAY 999
+    430 GOTO 20
+    500 ?AT 7,0;"1PAY 2BORROW(50) ";
+    510 K=INKEY:IF K=49 GOTO 550
+    520 IF K=50 C=C+50:D=D+50:GOTO 30
+    530 GOTO 510
+    550 X=50:IF D<50 X=D
+    560 IF C>=X C=C-X:D=D-X
+    570 GOTO 30
+    600 ?AT 5,0;"ITEM(1-3)?";
+    610 K=INKEY:IF K<49 GOTO 610
+    620 IF K>51 GOTO 610
+    630 I=K-48:?AT 6,10;CHR(K)
+    640 ?AT 6,0;"AMOUNT(1-9)?";
+    650 K=INKEY:IF K<49 GOTO 650
+    660 IF K>57 GOTO 650
+    670 Y=K-48:?AT 6,12;CHR(K):DELAY 999:RETURN
 
 ## Authors and Contributors
 
