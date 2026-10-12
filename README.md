@@ -8,10 +8,12 @@ files. Finally it was known as TinyBasic Plus with changes made by Scott Lawrenc
 
 This fork of TinyBasic Plus is designed specifically for the eMBee TWO which is a credit card sized computer that boots straight to BASIC. Here are the hardware specs:
 
+- ATmega 328P microcontroller CPU - running at 8MHz
+- 16-key multi-purpose keypad allowing numeric, keyword, alphabetic and symbol input
 - 1KB RAM available to the user (1,024 bytes shared between the program listing and the @() array)
 - 1KB internal EEPROM for storing one program
 - 32KB external EEPROM for storing up to 32 programs
-- Piezo sounder supporting key clicks and audio commands
+- Piezo sounder supporting key clicks and audio commands (with sound on/off switch)
 - Ability to send and receive data from another eMBee TWO via Game Boy Link Cable
 - Ability to send and receive data from a PC/Mac via UART 
 
