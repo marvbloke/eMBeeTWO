@@ -42,9 +42,9 @@ This fork of TinyBasic Plus is designed specifically for the eMBee TWO which is 
 - CHAIN slot_number - *equivalent of: load slot_number, run*
 
 ### IO, Documentation
-- INPUT variable	- *let the user input an expression (number or variable name*
-- PEEK( address )	- *get a value in memory* (unimplemented)
-- POKE address		- *set a value in memory* (unimplemented)
+- INPUT variable	- *let the user input an expression (number or variable name)*
+- PEEK( address )	- *get a value in memory*
+- POKE address		- *set a value in memory*
 - SEND - *send data to other eMBee TWO or PC/Mac*
 - RECV - *receive data from other eMBee TWO or PC/Mac*
 - PRINT expression	- *print out the expression, also "?"*
