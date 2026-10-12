@@ -1,62 +1,66 @@
-TinyBasic Plus
-==============
+# eMBee TWO Firmware
 
-A C implementation of Tiny Basic, with a focus on support for
+This is an implementation of Tiny Basic, with a focus on support for
 Arduino.  It was originally written by Gordon Brandly in the form
 of "68000 Tiny Basic", and then ported to C by Michael Field as
 "Arduino Basic", though still called "Tiny Basic" in the source
-files.
+files. Finally it was known as TinyBasic Plus with changes made by Scott Lawrence.
 
-TinyBasic Plus is an extension and modification upon the original
-"Tiny Basic" by adding support for a few more devices, configurable
-at build time.  It is designed for use on the Arduino, although
-builds will soon be easily possible for other platforms through
-command line makefiles.  Provided is a makefile that builds for 
-unix-ey type OSes.  It has only been tested for Darwin (OS X).
+This fork of TinyBasic Plus is designed specifically for the eMBee TWO which is a credit card sized computer that boots straight to BASIC. Here are the hardware specs:
 
-Features added include support for fileio (SD Library), autorunning
-a program from the SD card, smaller footprint (PROGMEM), support
-for pin data IO, and support for the on-chip EEProm storage for your
-program. 
+- 1KB RAM available to the user (1,024 bytes shared between the program listing and the @() array)
+- 1KB internal EEPROM for storing one program
+- 32KB external EEPROM for storing up to 32 programs
+- Piezo sounder supporting key clicks and audio commands
+- Ability to send and receive data from another eMBee TWO via Game Boy Link Cable
+- Ability to send and receive data from a PC/Mac via UART 
 
-# Full list of supported statements and functions
+## Full list of supported statements and functions
 
-## System
-- BYE		- *exits Basic, soft reboot on Arduino*
+### System
+
 - END 		- *stops execution from the program, also "STOP"*
-- MEM		- *displays memory usage statistics*
+- MEM		- *displays bytes of RAM available to @() array*
 - NEW		- *clears the current program*
+- LIST - *show the current program listing*
 - RUN		- *executes the current program*
 
-## File IO/SD Card
-- FILES		- 	*lists the files on the SD card*
-- LOAD filename.bas	- *loads a file from the SD card*
-- CHAIN filename.bas - *equivalent of: new, load filename.bas, run*
-- SAVE filename.bas	- *saves the current program to the SD card, overwriting*
 
-## EEProm - nonvolatile on-chip storage
-- EFORMAT	- clears the EEProm memory
-- ELOAD		- load the program in from EEProm
-- ESAVE		- save the current program to the EEProm
-- ELIST		- print out the contents of EEProm
-- ECHAIN	- load the program from EEProm and run it
+### Internal EEPROM
+- EFORMAT	- clears the EEPROM memory
+- ELOAD		- load the program in from EEPROM
+- ESAVE		- save the current program to the EEPROM
+- ELIST		- print out the contents of EEPROM
+- ECHAIN	- load the program from EEPROM and run it
 
-## IO, Documentation
+
+### External EEPROM
+- FORMAT - clears all slots on the external EEPROM
+- FILES		- 	*shows which slots 1-32 are in use*
+- LOAD slot_number	- *loads a file from the external EEPROM*
+- SAVE slot_number	- *saves the current program to the external EEPROM, overwriting
+- CHAIN slot_number - *equivalent of: load slot_number, run*
+
+### IO, Documentation
 - INPUT variable	- *let the user input an expression (number or variable name*
 - PEEK( address )	- *get a value in memory* (unimplemented)
 - POKE address		- *set a value in memory* (unimplemented)
+- SEND - *send data to other eMBee TWO or PC/Mac*
+- RECV - *receive data from other eMBee TWO or PC/Mac*
 - PRINT expression	- *print out the expression, also "?"*
 - REM stuff		- *remark/comment, also "'"*
+- HELP - *display user manual, optionally with command*
 
-## Expressions, Math
-- A=V, LET A=V	- *assign value to a variable*
-- +, -, \*, / - *Math*
+### Expressions, Maths
+- A=value, LET A=value	- *assign value to a variable*
+- @(x)=value, LET @(x)=value - *assign value to an array in position x (up to the maximum available RAM)*
+- +, -, \*, / - *Maths*
 - <,<=,=,<>,!=,>=,> - *Comparisons*
 - ABS( expression )  - *returns the absolute value of the expression*
-- RSEED( v ) - *sets the random seed to v*
+- RSEED *or* RSEED( v ) - *sets the random seed to runtime or v*
 - RND( m ) - *returns a random number from 0 to m*
 
-## Control
+### Control
 - IF expression statement - *perform statement if expression is true*
 - FOR variable = start TO end	- *start for block*
 - FOR variable = start TO end STEP value - *start for block with step*
@@ -65,179 +69,180 @@ program.
 - GOSUB linenumber - *call a subroutine at this line number*
 - RETURN	- *return from a subroutine*
 
-## Pin IO 
+### Pin IO 
 - DELAY	timems*- wait (in milliseconds)*
 - DWRITE pin,value - *set pin with a value (HIGH,HI,LOW,LO)*
 - AWRITE pin,value - *set pin with analog value (pwm) 0..255*
 - DREAD( pin ) - *get the value of the pin* 
 - AREAD( analogPin ) - *get the value of the analog pin*
 
-NOTE: "PINMODE" command removed as of version 0.11
 
-## Sound - Piezo wired with red/+ on pin 5 and black/- to ground
+### Sound
 - TONE freq,timems - play "freq" for "timems" milleseconds (1000 = 1 second)
 - TONEW freq,timems - same as above, but also waits for it to finish
 - NOTONE - stop playback of all playing tones
 
-NOTE: TONE commands are by default disabled
-
-
-# Example programs
+## Example programs
 
 Here are a few example programs to get you started...
 
-## User Input
+### #1 - PRIME
 
-Let a user enter a new value for a variable, enter a number like '33' or '42',
-or a varaible like 'b'.
+Displays all prime numbers up to 32,767
 
-	10 A=0
-	15 B=999
-	20 PRINT "A is ", A
-	30 PRINT "Enter a new value ";
-	40 INPUT A
-	50 PRINT "A is now ", A
+    10 CLS
+    20 PRINT "PRIME NUMBERS"
+    30 PRINT "2 ";
+    40 N = 3
+    50 D = 3
+    60 IF D > (N / D) GOTO 100
+    70 IF (N / D) * D = N GOTO 110
+    80 D = D + 2
+    90 GOTO 60
+    100 PRINT N;" ";
+    110 N = N + 2
+    120 IF N > 0 GOTO 50
+### #2 - HILO
 
+Build up your jackpot by guessing the number between 1 and 100. You have 6 guesses for each number.  
+*Inspired by or adapted from:
+Ahl, David H. (Ed.). BASIC Computer Games: Microcomputer Edition. 
+Workman Publishing, 1978.*
 
-## Blink
+    10 CLS
+    20 PRINT "HI-LO JACKPOT"
+    30 LET E = 0
+    40 PRINT "PRESS A KEY TO START"
+    50 IF INKEY = 0 GOTO 50
+    60 RSEED
+    70 LET N = RND(100)+1
+    75 CLS
+    80 PRINT "THERE IS MONEY"
+    83 PRINT "BETWEEN $1 AND $100"
+    85 PRINT "IN THE JACKPOT."
+    90 PRINT "YOU HAVE 6 CHANCES TO"
+    95 PRINT "GUESS IT."
+    100 FOR I = 1 TO 6
+    110 PRINT "YOUR GUESS ";I;"?"
+    120 INPUT G
+    130 IF G = N GOTO 190
+    140 IF G < N GOTO 170
+    150 PRINT G;" IS TOO HIGH."
+    160 GOTO 180
+    170 PRINT G;" IS TOO LOW."
+    180 NEXT I
+    185 PRINT "YOU BLEW IT..."
+    186 PRINT "THE JACKPOT WAS $"; N
+    187 GOTO 220
+    190 PRINT "GOT IT IN "; I; " GUESSES!"
+    200 LET E = E + N
+    210 PRINT "YOU WON $"; N; " - TOTAL EARNINGS: $"; E
+    220 PRINT "PLAY AGAIN"
+    225 PRINT "(1=YES/2=NO)?"
+    230 INPUT K
+    240 IF K = 1 GOTO 70
+    250 PRINT "FINAL EARNINGS: $"; E
+    260 END
+### #3 - FIBONACCI
 
-hook up an LED between pin 3 and ground
+Shows all numbers in the Fibonacci sequence.
 
-	10 FOR A=0 TO 10
-	20 DWRITE 3, HIGH
-	30 DELAY 250
-	40 DWRITE 3, LOW
-	50 DELAY 250
-	60 NEXT A
+    10 CLS
+    20 PRINT "FIBONACCI"
+    30 LET A = 0
+    40 LET B = 1
+    50 PRINT A;" ";
+    60 LET C = A + B
+    70 IF C < 0 GOTO 110
+    80 LET A = B
+    90 LET B = C
+    100 GOTO 50
+    110 PRINT B
+    120 END
 
-## Fade
+### #4 - BATTLESHIPS
 
-hook up an LED between pin 3 and ground
+Play a classic game of Battleships (one player only)
 
-	10 FOR A=0 TO 10
-	20 FOR B=0 TO 255
-	30 AWRITE 3, B
-	40 DELAY 10
-	50 NEXT B
-	60 FOR B=255 TO 0 STEP -1
-	70 AWRITE 3, B
-	80 DELAY 10
-	90 NEXT B
-	100 NEXT A
+    10 CLS:?"BATTLESHIPS"
+    20 K=INKEY:IF K=0 GOTO 20
+    30 RSEED:H=0:M=0
+    40 FOR I=0 TO 62: @(I)=0: NEXT I
+    60 FOR S=1 TO 4
+    70 Z=3
+    80 IF S=1 Z=4
+    90 IF S=4 Z=2
+    100 D=RND(2):W=1
+    110 IF D=1 W=9
+    120 IF D=0 X=RND(10-Z):Y=RND(7)
+    130 IF D=1 X=RND(9):Y=RND(8-Z)
+    140 C=0:B=Y*9+X
+    150 FOR I=0 TO Z-1
+    160 C=C+@(B+I*W):NEXT I
+    170 IF C>0 GOTO 100
+    180 FOR I=0 TO Z-1
+    190 @(B+I*W)=1:NEXT I
+    200 NEXT S
+    210 CLS:?" 123456789";
+    220 FOR Y=0 TO 6
+    230 ?:?CHR(65+Y);".........";
+    235 DELAY 20
+    240 NEXT Y
+    245 ?AT 4,11;"TARGET:";
+    250 ?AT 0,11;"H:";H;" L:";12-H;" "
+    260 ?AT 5,11;">  ";
+    270 K=INKEY:IF K<65 GOTO 270
+    280 IF K>71 GOTO 270
+    290 Y=K-65:?AT 5,12;CHR(K);
+    300 K=INKEY:IF K<49 GOTO 300
+    310 IF K>57 GOTO 300
+    320 X=K-49:?AT 5,13;CHR(K);:DELAY 200
+    330 P=Y*9+X:V=@(P):IF V>1 GOTO 250
+    340 IF V=1 GOTO 370
+    350 @(P)=2:M=M+1:?AT 7,11;"MISS!";:DELAY 10:?AT Y+1,X+1;"O";
+    360 GOTO 250
+    370 @(P)=3:H=H+1:?AT 7,11;"HIT! ";:DELAY 10:?AT Y+1,X+1;"X";
+    380 IF H<12 GOTO 250
+    390 ?AT 7,11;"YOU WIN!"
+    400 END
 
-## LED KNOB
-
-hook up a potentiometeter between analog 2 and ground, led from digital 3 and ground.  If knob is at 0, it stops
-
-	10 A = AREAD( 2 )
-	20 PRINT A
-	30 B = A / 4
-	40 AWRITE 3, B
-	50 IF A == 0 GOTO 100
-	60 GOTO 10
-	100 PRINT "Done."
-
-## ECHAIN example
+### #6 - SYNTH
 
 Write a small program, store it in EEPROM.  We'll show that variables don't
 get erased when chaining happens
 
-	EFORMAT
-	10 A = A + 2
-	20 PRINT A
-	30 PRINT "From eeprom!"
-	40 IF A = 12 GOTO 100
-	50 PRINT "Shouldn't be here."
-	60 END
-	100 PRINT "Hi!"
+    10 CLS:?"POCKET SYNTH"
+    20 ?"1-8:PLAY 9:DOWN 0:UP"
+    30 V=2:M=2:?AT 3,0;"OCTAVE: ";V
+    40 K=INKEY:IF K=0 GOTO 40
+    50 IF K=57 GOTO 160
+    60 IF K=48 GOTO 180
+    70 F=0
+    80 IF K=49 F=131
+    90 IF K=50 F=147
+    100 IF K=51 F=165
+    110 IF K=52 F=175
+    120 IF K=53 F=196
+    130 IF K=54 F=220
+    140 IF K=55 F=247
+    150 IF K=56 F=262
+    155 IF F>0 TONE F*M,200:?AT 5,0;"PLAYING: ";K-48
+    157 GOTO 40
+    160 IF V>1 V=V-1:M=M/2:?AT 3,8;V
+    170 GOTO 40
+    180 IF V<4 V=V+1:M=M*2:?AT 3,8;V
+    190 GOTO 40
 
-Then store it in EEProm
-
-	ESAVE
-
-Now, create a new program in main memory and run it
-
-	NEW
-	10 A = 10
-	20 PRINT A
-	30 PRINT "From RAM!"
-	40 ECHAIN
-
-List both, and run
-
-	ELIST
-	LIST
-	RUN
-	
-
-# Device Support
-## Current
-- Arduino - ATMega 168 (~100 bytes available)
-- Arduino - ATMega 368 (~1100 bytes available)
-- SD cards (via SD Library, for FILES, LOAD, SAVE commands, uses 9k of ROM)
-- EEProm (via EEProm Library, uses 500 bytes of ROM)
-- Serial IO - command console
-
-## Future
-- PS2 Keyboard for standalone use (maybe)
-- Graphics support via common function names and ANSI/ReGIS escape codes
-
-
-# Known Quirks and Limitations
-- If LOAD or SAVE are called, FILES fails subsequent listings
-- SD cards are not hot-swappable. A reset is required between swaps.
-
-
-# Authors and Contributors
+## Authors and Contributors
 
 - Tiny Basic 68k - Gordon Brandly [Project Page (via archive.org)](https://web.archive.org/web/20170306113457/http://members.shaw.ca:80/gbrandly/68ktinyb.html)
 - Arduino Basic / Tiny Basic C - Michael Field [Project Page](http://hamsterworks.co.nz/mediawiki/index.php/Arduino_Basic)
 - Tiny Basic Plus - Scott Lawrence <yorgle@gmail.com> [Github Page](http://github.com/BleuLlama/TinyBasicPlus)
 
 - Jurg Wullschleger - Fix for unary operations and whitespace in expressions
+- Matthew Begg - eMBee TWO-specific code
 
-# Links
-- [Arduino Microcontroller](http://arduino.cc)
-
-# Licensing
-
-Mike Field based his C port of Tiny Basic on the 68000 Tiny BASIC which carried 
-the following license:
-
-~~~
-******************************************************************
-*                                                                *
-*               Tiny BASIC for the Motorola MC68000              *
-*                                                                *
-* Derived from Palo Alto Tiny BASIC as published in the May 1976 *
-* issue of Dr. Dobb's Journal.  Adapted to the 68000 by:         *
-*       Gordon Brandly                                           *
-*       12147 - 51 Street                                        *
-*       Edmonton AB  T5W 3G8                                     *
-*       Canada                                                   *
-*       (updated mailing address for 1996)                       *
-*                                                                *
-* This version is for MEX68KECB Educational Computer Board I/O.  *
-*                                                                *
-******************************************************************
-*    Copyright (C) 1984 by Gordon Brandly. This program may be   *
-*    freely distributed for personal use only. All commercial    *
-*                      rights are reserved.                      *
-******************************************************************
-~~~
-
-However, Mike did not include a license of his own for his
- version of this. From discussions with him, I felt that the MIT license is
-the most applicable to his intent.
-
-I am in the process of further determining what should be done wrt licensing 
-further.  This entire header will likely change with the next version 0.16, 
-which will hopefully nail down the whole thing so we can get back to 
-implementing features instead of licenses.  Thank you for your time.
-
-# MIT License
-
-Copyright (c) 2012-2013
+## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

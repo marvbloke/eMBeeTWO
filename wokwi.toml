@@ -1,5 +1,5 @@
 [wokwi]
 version = 1
-firmware = '.pio/build/nano_tester/firmware.elf'
-elf = '.pio/build/nano_tester/firmware.elf'
+firmware = '.pio.nosync/nano_tester/firmware.elf'
+elf = '.pio.nosync/nano_tester/firmware.elf'
 diagram = 'diagram.json'

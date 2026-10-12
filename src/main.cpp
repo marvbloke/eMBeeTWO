@@ -20,7 +20,7 @@
 // copies of the Software.
 ////////////////////////////////////////////////////////////////////////////////
 
-#define SIMULATOR_BUILD 0
+#define SIMULATOR_BUILD 1
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -129,7 +129,6 @@ const static unsigned char keywords[] PROGMEM = {
   'P','R','I','N','T'+0x80,
   'P','O','K','E'+0x80,
   'S','T','O','P'+0x80,
-  'B','Y','E'+0x80,
   'F','I','L','E','S'+0x80,
   'M','E','M'+0x80,
   '?'+ 0x80,
@@ -156,7 +155,7 @@ enum {
   KW_AT = 0, KW_SEND, KW_RECV, KW_HELP, KW_LIST, KW_LOAD, KW_NEW, 
   KW_RUN, KW_SAVE, KW_FORMAT, KW_CLS,
   KW_NEXT, KW_LET, KW_IF, KW_GOTO, KW_GOSUB, KW_RETURN, KW_REM,
-  KW_FOR, KW_INPUT, KW_PRINT, KW_POKE, KW_STOP, KW_BYE, KW_FILES,
+  KW_FOR, KW_INPUT, KW_PRINT, KW_POKE, KW_STOP, KW_FILES,
   KW_MEM, KW_QMARK, KW_QUOTE, KW_AWRITE, KW_DWRITE, KW_DELAY,
   KW_END, KW_RSEED, KW_CHAIN,
   KW_ECHAIN, KW_ELIST, KW_ELOAD, KW_EFORMAT, KW_ESAVE,
@@ -1195,10 +1194,153 @@ interperateAtTxtpos:
     goto run_next_statement;
 
   case KW_HELP:
-    oled.clear();
-    oled.setCursor(0, 0);
-    printmsg(helpmsg1);
+  {
+    // ==========================================================
+    // SHARED HELP STRINGS (Define all command manuals here once)
+    // ==========================================================
+    static const char h_new[] PROGMEM   = "NEW\nClears the current\nprogram from RAM.";
+    static const char h_run[] PROGMEM   = "RUN\nStarts the program.";
+    static const char h_files[] PROGMEM = "FILES\nShows 32-slot grid\nof I2C EEPROM.";
+    static const char h_goto[] PROGMEM  = "GOTO line\nJumps to line.\nEX:\n10 GOTO 100";
+    static const char h_cls[] PROGMEM   = "CLS\nClears the screen.\nEX:\n10 CLS\n20 PRINT \"HI\"";
+    static const char h_tonew[] PROGMEM = "TONEW f,d\nPlays freq in Hz\nfor dur in ms.\nEX: 10 TONEW 440,500";
+    static const char h_notFound[] PROGMEM = "No detailed help\nfound for that\ncommand.";
+    // Add more shared strings here...
+
+    ignore_blanks();
+    
+    // 1. INTERACTIVE MENU (No parameters provided)
+    if (*txtpos == NL || *txtpos == '\0' || *txtpos == ':') {
+      char m_choice = 0;
+      char s_choice = 0;
+
+    help_main_menu:
+      oled.clear();
+      printmsg((const unsigned char*)PSTR("- EMBEE TWO HELP -"));
+      printmsg((const unsigned char*)PSTR("1 SYSTEM"));
+      printmsg((const unsigned char*)PSTR("2 EEPROM"));
+      printmsg((const unsigned char*)PSTR("3 CONTROL"));
+      printmsg((const unsigned char*)PSTR("4 SCREEN/DATA"));
+      printmsg((const unsigned char*)PSTR("5 HARDWARE PINS"));
+      printmsg((const unsigned char*)PSTR("6 MEMORY/COMMS"));
+      printmsgNoNL((const unsigned char*)PSTR("7 SOUND/MATH"));
+
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        m_choice = checkInkey();
+        
+        if (m_choice >= '1' && m_choice <= '7') {
+          break; 
+        } else if (m_choice != 0) {
+          oled.clear();
+          goto run_next_statement; 
+        }
+      }
+
+      if (m_choice == '1') goto help_cat_1;
+      else if (m_choice == '2') goto help_cat_2;
+      else if (m_choice == '3') goto help_cat_3;
+      else goto help_main_menu; 
+
+
+    // --- CATEGORY 1: SYSTEM ---
+    help_cat_1:
+      oled.clear();
+      printmsg((const unsigned char*)PSTR("--- SYSTEM ---"));
+      printmsgNoNL((const unsigned char*)PSTR("1 NEW\n2 RUN\n3 LIST\n4 MEM\n5 BYE\n6 STOP\n7 END"));
+      
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        s_choice = checkInkey();
+        if (s_choice >= '1' && s_choice <= '7') break;
+        else if (s_choice != 0) goto help_main_menu; 
+      }
+      
+      oled.clear();
+      // Pointing to the shared variables!
+      if (s_choice == '1') printmsg((const unsigned char*)h_new);
+      else if (s_choice == '2') printmsg((const unsigned char*)h_run);
+      // ... continue mapping s_choice to other shared variables
+      
+      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        if (checkInkey() != 0) goto help_cat_1; 
+      }
+
+    // --- CATEGORY 2: EEPROM ---
+    help_cat_2:
+      oled.clear();
+      printmsg((const unsigned char*)PSTR("--- EEPROM ---"));
+      printmsgNoNL((const unsigned char*)PSTR("1 FILES\n2 LOAD slot\n3 SAVE slot\n4 CHAIN slot\n5 FORMAT"));
+      
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        s_choice = checkInkey();
+        if (s_choice >= '1' && s_choice <= '5') break;
+        else if (s_choice != 0) goto help_main_menu; 
+      }
+      
+      oled.clear();
+      if (s_choice == '1') printmsg((const unsigned char*)h_files);
+      // ... continue mapping other EEPROM commands
+      
+      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        if (checkInkey() != 0) goto help_cat_2; 
+      }
+      
+    // --- CATEGORY 3: CONTROL ---
+    help_cat_3:
+      oled.clear();
+      printmsg((const unsigned char*)PSTR("--- CONTROL ---"));
+      printmsgNoNL((const unsigned char*)PSTR("1 GOTO\n2 GOSUB\n3 RETURN\n4 FOR\n5 NEXT\n6 IF"));
+      
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        s_choice = checkInkey();
+        if (s_choice >= '1' && s_choice <= '6') break;
+        else if (s_choice != 0) goto help_main_menu; 
+      }
+      
+      oled.clear();
+      if (s_choice == '1') printmsg((const unsigned char*)h_goto);
+      // ... continue mapping other CONTROL commands
+
+      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
+      while (1) {
+        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
+        if (checkInkey() != 0) goto help_cat_3; 
+      }
+    } 
+    
+    // 2. DIRECT LOOKUP (e.g., HELP GOTO)
+    else {
+      char topic[10];
+      uint8_t i = 0;
+      
+      while(*txtpos != ' ' && *txtpos != NL && *txtpos != '\0' && *txtpos != ':' && i < 9) {
+        topic[i++] = toupper(*txtpos++);
+      }
+      topic[i] = '\0'; 
+      
+      oled.clear();
+      
+      // Pointing to the exact same shared variables!
+      if (strncmp(topic, "NEW", 3) == 0)        printmsg((const unsigned char*)h_new);
+      else if (strncmp(topic, "RUN", 3) == 0)   printmsg((const unsigned char*)h_run);
+      else if (strncmp(topic, "FILES", 5) == 0) printmsg((const unsigned char*)h_files);
+      else if (strncmp(topic, "GOTO", 4) == 0)  printmsg((const unsigned char*)h_goto);
+      else if (strncmp(topic, "CLS", 3) == 0)   printmsg((const unsigned char*)h_cls);
+      else if (strncmp(topic, "TONEW", 5) == 0) printmsg((const unsigned char*)h_tonew);
+      else {
+        printmsg((const unsigned char*)h_notFound);
+      }
+    }
+    
     goto run_next_statement;
+  }
 
   // --- Sound & Piezo Commands ---
   case KW_TONE:
@@ -1642,9 +1784,6 @@ inputagain:
     if(txtpos[0] != NL && txtpos[0] != ':') goto qwhat;
     current_line = program_end;
     goto execline;
-
-  case KW_BYE:
-    return;
 
   case KW_AWRITE:
   case KW_DWRITE:
