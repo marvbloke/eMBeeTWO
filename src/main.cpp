@@ -1185,7 +1185,32 @@ interperateAtTxtpos:
     goto warmstart;
 
   case KW_FORMAT:
-    cmd_Format();
+    {
+      currentKeypadMode = MODE_M;
+      printmsgNoNL((const unsigned char *)PSTR("FORMAT EXT? (Y/N) "));
+      char choice = 0;
+      while(1) {
+        if (breakcheck()) { 
+          line_terminator(); 
+          printmsg(breakmsg); 
+          goto warmstart; 
+        }
+        
+        choice = checkInkey();
+        
+        if (choice == 'Y') {
+          outchar(choice);
+          line_terminator();
+          cmd_Format();
+          break;
+        } else if (choice != 0) { // Any other key aborts
+          outchar(choice);
+          line_terminator();
+          printmsg((const unsigned char *)PSTR("ABORTED"));
+          break;
+        }
+      }
+    }
     goto warmstart;
 
   case KW_CLS:
@@ -1194,129 +1219,77 @@ interperateAtTxtpos:
     goto run_next_statement;
 
   case KW_HELP:
-  {
-    // ==========================================================
-    // SHARED HELP STRINGS (Define all command manuals here once)
-    // ==========================================================
-    static const char h_new[] PROGMEM   = "NEW\nClears the current\nprogram from RAM.";
-    static const char h_run[] PROGMEM   = "RUN\nStarts the program.";
-    static const char h_files[] PROGMEM = "FILES\nShows 32-slot grid\nof I2C EEPROM.";
-    static const char h_goto[] PROGMEM  = "GOTO line\nJumps to line.\nEX:\n10 GOTO 100";
-    static const char h_cls[] PROGMEM   = "CLS\nClears the screen.\nEX:\n10 CLS\n20 PRINT \"HI\"";
-    static const char h_tonew[] PROGMEM = "TONEW f,d\nPlays freq in Hz\nfor dur in ms.\nEX: 10 TONEW 440,500";
-    static const char h_notFound[] PROGMEM = "No detailed help\nfound for that\ncommand.";
-    // Add more shared strings here...
+    {
+      // ==========================================================
+      // HELP STRINGS
+      // ==========================================================
 
-    ignore_blanks();
-    
-    // 1. INTERACTIVE MENU (No parameters provided)
-    if (*txtpos == NL || *txtpos == '\0' || *txtpos == ':') {
-      char m_choice = 0;
-      char s_choice = 0;
+      // COMMANDS
+      static const char h_at[] PROGMEM      = "AT Y,X_______________\nUSED WITHIN PRINT\nSTATEMENT TO PLACE\nTHE CURSOR ON SCREEN.\n(Y=0 TO 7, X=0 TO 20)\nEX: PRINT AT 4,6;\"HI\"\nOR: ?AT4,6;\"HI\"";
+      static const char h_send[] PROGMEM    = "SEND_________________\nSENDS THE CURRENT\nPROGRAM TO ANOTHER\nDEVICE.\nSEND EXPR____________\nWITH EXPR, SENDS THAT\nEX. SEND 56";
+      static const char h_recv[] PROGMEM    = "RECV_________________\nRECEIVES A PROGRAM\nFROM ANOTHER DEVICE.\nRECV VAR_____________\nRECEIVES A VALUE AND\nSTORES IN A VARIABLE\nEX. RECV N";
+      static const char h_help[] PROGMEM    = "HELP CMD_____________\nDISPLAYS DESCRIPTION\nOF A COMMAND OR\nFUNCTION\nEX. HELP PRINT";
+      static const char h_list[] PROGMEM    = "LIST_________________\nDISPLAY FULL PROGRAM\nLISTING\nLIST START,END_______\nLIST PROGRAM BETWEEN\nTWO LINE NUMBERS\nEX. LIST 40,90";
+      static const char h_load[] PROGMEM    = "LOAD SLOT____________\nLOAD A PROGRAM FROM\nEEPROM SLOT 1 TO 32.\nEX. LOAD 3";
+      static const char h_new[] PROGMEM     = "NEW__________________\nERASES THE CURRENT\nPROGRAM LISTING\nEX. NEW";
+      static const char h_run[] PROGMEM     = "RUN__________________\nSTARTS RUNNING THE\nCURRENT PROGRAM FROM\nTHE BEGINNING\nEX. RUN";
+      static const char h_save[] PROGMEM    = "SAVE SLOT____________\nSAVES AND OVERWRITES\nTHE PROGRAM IN EEPROM\nSLOT 1 TO 32\nEX. SAVE 3";
+      static const char h_format[] PROGMEM  = "FORMAT_______________\nERASES ALL 32 SLOTS\nON THE EEPROM.\nWARNING: CANNOT BE\nREVERSED\nEX. FORMAT";
+      static const char h_cls[] PROGMEM     = "CLS__________________\nCLEARS THE SCREEN AND\nRESETS THE PRINT\nPOSITION TO 0,0\nEX. CLS";
+      static const char h_next[] PROGMEM    = "NEXT VAR_____________\nUSED IN CONJUNCTION\nWITH FOR. LOOPS BACK\nTO FOR COMMAND IF VAR\nHASN'T REACHED THE\nFINAL CONDITION\nEX. NEXT N";
+      static const char h_let[] PROGMEM     = "LET VAR=EXPR_________\nASSIGNS AN EXPRESSION\nTO A VARIABLE.\nCAN BE OMITTED FOR\nSPACE\nEX. LET A=3*5+2\nEX. A=3*5+2";
+      static const char h_if[] PROGMEM      = "IF COND STATEMENT____\nRUN THE STATEMENT IF\nTHE CONDITION IS TRUE\nEX. IF A>3 GOTO 20\nEX. IF B=45 PRINT \"Y\"";
+      static const char h_goto[] PROGMEM    = "GOTO LINENUM_________\nJUMPS TO THE LINE\nNUMBER GIVEN\nEX. IF A=2 GOTO 200\nEX. 10 PRINT \"HI\"\n    20 GOTO 10";
+      static const char h_gosub[] PROGMEM   = "GOSUB LINENUM________\nJUMPS TO THE LINE\nNUMBER GIVEN TO RUN A\nSUBROUTINE. USED WITH\n'RETURN' TO GET BACK\nTO ORIGINAL POSITION\nEX. GOSUB 1000";
+      static const char h_return[] PROGMEM  = "RETURN_______________\nUSED AT THE END OF A\nSUBROUTINE TO JUMP\nBACK TO THE 'GOSUB'\nIT WAS RUN FROM\nEX. 10 GOSUB 90:?\"I\"\n    90 ?\"H\";:RETURN\n";
+      static const char h_rem[] PROGMEM     = "REM COMMENT__________\n' COMMENT____________\nREMARKS FOR THE\nPROGRAMMER. IGNORED\nWHEN THE PROGRAM IS\nRUN\nEX. 10 REM * LOOP *";
+      static const char h_for[] PROGMEM     = "FOR VAR=START TO END_\nLOOP FROM START TO\nEND. OPTIONALLY USE\n'STEP' TO JUMP MORE.\nUSE WITH 'NEXT'\nEX. 10 FOR N=1 TO 10\n    20 ?\"N=\";N:NEXT N\n";
+      static const char h_input[] PROGMEM   = "INPUT VAR____________\nLETS THE USER ENTER A\nNUMBER OR EXPRESSION\nEX. 10 ?\"HOW OLD?\"\n    20 INPUT A\n    30 ?\"YOU ARE \";A;\n    40 ?\" YEARS OLD.\"";
+      static const char h_print[] PROGMEM   = "PRINT________________\nPRINT EXPR___________\nPRINTS THE EXPRESSION\nTO THE SCREEN\nEX. PRINT \"SUM:\";3+4\n(DISPLAYS SUM:7)";
+      static const char h_poke[] PROGMEM    = "POKE ADDR,VAL________\nWRITE A VALUE TO AN\nADDRESS IN MEMORY\nEX. 10 POKE 245,4\n    20 ?PEEK(245)\n";
+      static const char h_stop[] PROGMEM    = "STOP_________________\nSTOPS EXECUTION OF\nTHE PROGRAM\nEX. 10 ?\"1 TO END\"\n    20 INPUT A\n    30 IF A=1 STOP\n    40 GOTO 10";
+      static const char h_files[] PROGMEM   = "FILES________________\nSHOWS ALL 32 SLOTS OF\nTHE EEPROM TO SEE IF\nEMPTY\nEX. FILES\n..  2 ..  4 .. ..\n 7 .. .. 10 11 12";
+      static const char h_mem[] PROGMEM     = "MEM__________________\nSHOWS HOW MANY BYTES\nOF PROGRAM MEMORY ARE\nLEFT\nEX. MEM\n1024 BYTES RAM";
+      static const char h_qmark[] PROGMEM   = "?____________________\n? EXPR___________\nPRINTS THE EXPRESSION\nTO THE SCREEN\nEX. ? \"SUM:\";3+4\n(DISPLAYS SUM:7)";
+      static const char h_quote[] PROGMEM   = "' COMMENT____________\nREM COMMENT__________\nREMARKS FOR THE\nPROGRAMMER. IGNORED\nWHEN THE PROGRAM IS\nRUN\nEX. 10 'COMMENT";
+      static const char h_awrite[] PROGMEM  = "AWRITE PIN,VAL_______\nWRITE A VALUE (0-255)\nTO AN ANALOG PIN\nEX. 10 ?\"SET BRIGHT?\"\n    20 INPUT B\n    30 AWRITE 3,B";
+      static const char h_dwrite[] PROGMEM  = "DWRITE PIN,HI/LO_____\nSET A DIGITAL PIN TO\nHI OR LO\nEX. 10 ?\"1=ON, 0=OFF\"\n20 INPUT D\n30 IF D=1 DWRITE 4,HI\n40 IF D=0 DWRITE 4,LO";
+      static const char h_delay[] PROGMEM   = "DELAY VAL____________\nWAIT IN MILLISECONDS\nEX. 10 ?\"WAIT 1 SEC\"\n    20 DELAY 1000\n    30 ?\"WAIT 4 SECS\"\n    40 DELAY 4000\n    50 ?\"DONE\"";
+      static const char h_end[] PROGMEM     = "END__________________\nSTOPS EXECUTION OF\nTHE PROGRAM\nEX. 10 ?\"1 TO END\"\n    20 INPUT A\n    30 IF A=1 END\n    40 GOTO 10";
+      static const char h_chain[] PROGMEM   = "CHAIN SLOT___________\nLOAD A PROGRAM FROM\nEEPROM SLOT 1 TO 32\nTHEN RUN IT\nEX. CHAIN 3";
+      static const char h_echain[] PROGMEM  = "ECHAIN_______________\nLOAD THE PROGRAM FROM\nTHE INTERNAL EEPROM\nTHEN RUN IT\nEX. ECHAIN";
+      static const char h_elist[] PROGMEM   = "ELIST________________\nLIST THE PROGRAM HELD\nON THE INTERNAL\nEEPROM\nEX. ELIST";
+      static const char h_eload[] PROGMEM   = "ELOAD________________\nLOAD THE PROGRAM FROM\nTHE INTERNAL EEPROM\nEX. ELOAD";
+      static const char h_eformat[] PROGMEM = "EFORMAT______________\nERASES THE PROGRAM\nON THE INTERNAL\nEEPROM\nWARNING: CANNOT BE\nREVERSED\nEX. EFORMAT";
+      static const char h_esave[] PROGMEM   = "ESAVE________________\nSAVE THE PROGRAM TO\nTHE INTERNAL EEPROM\nEX. ESAVE";
+      static const char h_tonew[] PROGMEM   = "TONEW FREQ,TIME______\nPLAY A FREQUENCY FOR\nA NUMBER OF\nMILLISECONDS AND WAIT\nEX. TONEW 440,1000\n(PLAYS AN 'A' FOR 1\nSECOND)";
+      static const char h_tone[] PROGMEM    = "TONE FREQ,TIME_______\nPLAY A FREQUENCY FOR\nA NUMBER OF\nMILLISECONDS\nEX. TONE 440,1000\n(PLAYS AN 'A' FOR 1\nSECOND)";
+      static const char h_notone[] PROGMEM  = "NOTONE_______________\nSTOPS PLAYBACK OF ALL\nPLAYING TONES\nEX. 10 TONE 440,20000\n20 IF INKEY>0 NOTONE\n30 GOTO 20\n(PLAYS 'A' UNTIL KEY)";
+      static const char h_mode[] PROGMEM    = "MODE NUM_____________\nSETS THE KEYPAD MODE\n(0=N 1=K 2=A 3=M 4=S)\nMODE_________________\nRETURNS THE CURRENT\nKEYPAD MODE\nEX. 10 ?MODE";
+      static const char h_rseed[] PROGMEM   = "RSEED________________\nSETS THE RANDOM SEED\nTO RUNTIME\nRSEED VAL____________\nSETS THE RANDOM SEED\nTO A VALUE\nEX. RSEED 345";
+      static const char h_chr[] PROGMEM     = "CHR(VAL)_____________\nUSED IN PRINT\nSTATEMENT TO DISPLAY\nAN ASCII CHARACTER\nEX. PRINT CHR(66)\n(DISPLAYS 'B')";
+      // FUNCTIONS
+      static const char h_peek[] PROGMEM    = "PEEK (ADDR)__________\nRETURNS THE VALUE AT\nTHAT MEMORY ADDRESS\nEX. 10 POKE 345,67\n    20 ?PEEK(345)\n(DISPLAYS 67)";
+      static const char h_abs[] PROGMEM     = "ABS (EXPR)___________\nRETURNS THE ABSOLUTE\nVALUE OF THE\nEXPRESSION\nEX. 10 A=-67\n    20 ?ABS(A)\n(DISPLAYS 67)";
+      static const char h_aread[] PROGMEM   = "AREAD (PIN)__________\nRETURNS THE VALUE OF\nTHE ANALOG PIN (FROM\n0 TO 255)\nEX. 10 ?AREAD(4)\n    20 GOTO 10";
+      static const char h_dread[] PROGMEM   = "DREAD (PIN)__________\nRETURNS THE VALUE OF\nTHE DIGITAL PIN\n0=LOW, 1=HIGH\nEX. 10 D=DREAD(4)\n    20 IF D=1 ?\"HI\"\n    30 IF D=0 ?\"LO\"";
+      static const char h_rnd[] PROGMEM     = "RND(VAL)_____________\nRETURNS A RANDOM\nNUMBER FROM 0 TO\nVAL-1\nEX. 10 ?\"DICE: \";\n    20 ?RND(6)+1\n    30 GOTO 10";
+      static const char h_inkey[] PROGMEM   = "INKEY________________\nRETURNS THE ASCII\nVALUE OF THE PRESSED\nKEY (0 FOR NO KEY)\nEX.\n10 IF INKEY=65 ?\"A\"\n20 GOTO 10";
+      
 
-    help_main_menu:
-      oled.clear();
-      printmsg((const unsigned char*)PSTR("- EMBEE TWO HELP -"));
-      printmsg((const unsigned char*)PSTR("1 SYSTEM"));
-      printmsg((const unsigned char*)PSTR("2 EEPROM"));
-      printmsg((const unsigned char*)PSTR("3 CONTROL"));
-      printmsg((const unsigned char*)PSTR("4 SCREEN/DATA"));
-      printmsg((const unsigned char*)PSTR("5 HARDWARE PINS"));
-      printmsg((const unsigned char*)PSTR("6 MEMORY/COMMS"));
-      printmsgNoNL((const unsigned char*)PSTR("7 SOUND/MATH"));
 
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        m_choice = checkInkey();
-        
-        if (m_choice >= '1' && m_choice <= '7') {
-          break; 
-        } else if (m_choice != 0) {
-          oled.clear();
-          goto run_next_statement; 
-        }
+      static const char h_notFound[] PROGMEM = "NO DETAILED HELP\nFOUND FOR THAT\nCOMMAND.";
+
+      ignore_blanks();
+      
+      // Catch empty HELP command and show usage
+      if (*txtpos == NL || *txtpos == '\0' || *txtpos == ':') {
+        oled.clear();
+        oled.setCursor(0, 0);
+        printmsg((const unsigned char*)PSTR("HELP CMD_____________\nDISPLAYS DESCRIPTION\nOF A COMMAND OR\nFUNCTION\nEX. HELP PRINT"));
+        goto run_next_statement;
       }
 
-      if (m_choice == '1') goto help_cat_1;
-      else if (m_choice == '2') goto help_cat_2;
-      else if (m_choice == '3') goto help_cat_3;
-      else goto help_main_menu; 
-
-
-    // --- CATEGORY 1: SYSTEM ---
-    help_cat_1:
-      oled.clear();
-      printmsg((const unsigned char*)PSTR("--- SYSTEM ---"));
-      printmsgNoNL((const unsigned char*)PSTR("1 NEW\n2 RUN\n3 LIST\n4 MEM\n5 BYE\n6 STOP\n7 END"));
-      
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        s_choice = checkInkey();
-        if (s_choice >= '1' && s_choice <= '7') break;
-        else if (s_choice != 0) goto help_main_menu; 
-      }
-      
-      oled.clear();
-      // Pointing to the shared variables!
-      if (s_choice == '1') printmsg((const unsigned char*)h_new);
-      else if (s_choice == '2') printmsg((const unsigned char*)h_run);
-      // ... continue mapping s_choice to other shared variables
-      
-      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        if (checkInkey() != 0) goto help_cat_1; 
-      }
-
-    // --- CATEGORY 2: EEPROM ---
-    help_cat_2:
-      oled.clear();
-      printmsg((const unsigned char*)PSTR("--- EEPROM ---"));
-      printmsgNoNL((const unsigned char*)PSTR("1 FILES\n2 LOAD slot\n3 SAVE slot\n4 CHAIN slot\n5 FORMAT"));
-      
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        s_choice = checkInkey();
-        if (s_choice >= '1' && s_choice <= '5') break;
-        else if (s_choice != 0) goto help_main_menu; 
-      }
-      
-      oled.clear();
-      if (s_choice == '1') printmsg((const unsigned char*)h_files);
-      // ... continue mapping other EEPROM commands
-      
-      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        if (checkInkey() != 0) goto help_cat_2; 
-      }
-      
-    // --- CATEGORY 3: CONTROL ---
-    help_cat_3:
-      oled.clear();
-      printmsg((const unsigned char*)PSTR("--- CONTROL ---"));
-      printmsgNoNL((const unsigned char*)PSTR("1 GOTO\n2 GOSUB\n3 RETURN\n4 FOR\n5 NEXT\n6 IF"));
-      
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        s_choice = checkInkey();
-        if (s_choice >= '1' && s_choice <= '6') break;
-        else if (s_choice != 0) goto help_main_menu; 
-      }
-      
-      oled.clear();
-      if (s_choice == '1') printmsg((const unsigned char*)h_goto);
-      // ... continue mapping other CONTROL commands
-
-      printmsgNoNL((const unsigned char*)PSTR("\n\n[ANY KEY TO BACK]"));
-      while (1) {
-        if (breakcheck()) { oled.clear(); printmsg(breakmsg); goto warmstart; }
-        if (checkInkey() != 0) goto help_cat_3; 
-      }
-    } 
-    
-    // 2. DIRECT LOOKUP (e.g., HELP GOTO)
-    else {
       char topic[10];
       uint8_t i = 0;
       
@@ -1326,21 +1299,64 @@ interperateAtTxtpos:
       topic[i] = '\0'; 
       
       oled.clear();
+      oled.setCursor(0, 0);
       
-      // Pointing to the exact same shared variables!
-      if (strncmp(topic, "NEW", 3) == 0)        printmsg((const unsigned char*)h_new);
-      else if (strncmp(topic, "RUN", 3) == 0)   printmsg((const unsigned char*)h_run);
-      else if (strncmp(topic, "FILES", 5) == 0) printmsg((const unsigned char*)h_files);
-      else if (strncmp(topic, "GOTO", 4) == 0)  printmsg((const unsigned char*)h_goto);
-      else if (strncmp(topic, "CLS", 3) == 0)   printmsg((const unsigned char*)h_cls);
-      else if (strncmp(topic, "TONEW", 5) == 0) printmsg((const unsigned char*)h_tonew);
+      if (strncmp_P(topic, PSTR("AT"), 2) == 0)            printmsg((const unsigned char*)h_at);
+      else if (strncmp_P(topic, PSTR("SEND"), 4) == 0)     printmsg((const unsigned char*)h_send);
+      else if (strncmp_P(topic, PSTR("RECV"), 4) == 0)     printmsg((const unsigned char*)h_recv);
+      else if (strncmp_P(topic, PSTR("HELP"), 4) == 0)     printmsg((const unsigned char*)h_help);
+      else if (strncmp_P(topic, PSTR("LIST"), 4) == 0)     printmsg((const unsigned char*)h_list);
+      else if (strncmp_P(topic, PSTR("LOAD"), 4) == 0)     printmsg((const unsigned char*)h_load);
+      else if (strncmp_P(topic, PSTR("NEW"), 3) == 0)      printmsg((const unsigned char*)h_new);
+      else if (strncmp_P(topic, PSTR("RUN"), 3) == 0)      printmsg((const unsigned char*)h_run);
+      else if (strncmp_P(topic, PSTR("SAVE"), 4) == 0)     printmsg((const unsigned char*)h_save);
+      else if (strncmp_P(topic, PSTR("FORMAT"), 6) == 0)   printmsg((const unsigned char*)h_format);
+      else if (strncmp_P(topic, PSTR("CLS"), 3) == 0)      printmsg((const unsigned char*)h_cls);
+      else if (strncmp_P(topic, PSTR("NEXT"), 4) == 0)     printmsg((const unsigned char*)h_next);
+      else if (strncmp_P(topic, PSTR("LET"), 3) == 0)      printmsg((const unsigned char*)h_let);
+      else if (strncmp_P(topic, PSTR("IF"), 2) == 0)       printmsg((const unsigned char*)h_if);
+      else if (strncmp_P(topic, PSTR("GOTO"), 4) == 0)     printmsg((const unsigned char*)h_goto);
+      else if (strncmp_P(topic, PSTR("GOSUB"), 5) == 0)    printmsg((const unsigned char*)h_gosub);
+      else if (strncmp_P(topic, PSTR("RETURN"), 6) == 0)   printmsg((const unsigned char*)h_return);
+      else if (strncmp_P(topic, PSTR("REM"), 3) == 0)      printmsg((const unsigned char*)h_rem);
+      else if (strncmp_P(topic, PSTR("FOR"), 3) == 0)      printmsg((const unsigned char*)h_for);
+      else if (strncmp_P(topic, PSTR("INPUT"), 5) == 0)    printmsg((const unsigned char*)h_input);
+      else if (strncmp_P(topic, PSTR("PRINT"), 5) == 0)    printmsg((const unsigned char*)h_print);
+      else if (strncmp_P(topic, PSTR("POKE"), 4) == 0)     printmsg((const unsigned char*)h_poke);
+      else if (strncmp_P(topic, PSTR("STOP"), 4) == 0)     printmsg((const unsigned char*)h_stop);
+      else if (strncmp_P(topic, PSTR("FILES"), 5) == 0)    printmsg((const unsigned char*)h_files);
+      else if (strncmp_P(topic, PSTR("MEM"), 3) == 0)      printmsg((const unsigned char*)h_mem);
+      else if (strncmp_P(topic, PSTR("?"), 1) == 0)        printmsg((const unsigned char*)h_qmark);
+      else if (strncmp_P(topic, PSTR("'"), 1) == 0)        printmsg((const unsigned char*)h_quote);
+      else if (strncmp_P(topic, PSTR("AWRITE"), 6) == 0)   printmsg((const unsigned char*)h_awrite);
+      else if (strncmp_P(topic, PSTR("DWRITE"), 6) == 0)   printmsg((const unsigned char*)h_dwrite);
+      else if (strncmp_P(topic, PSTR("DELAY"), 5) == 0)    printmsg((const unsigned char*)h_delay);
+      else if (strncmp_P(topic, PSTR("END"), 3) == 0)      printmsg((const unsigned char*)h_end);
+      else if (strncmp_P(topic, PSTR("RSEED"), 5) == 0)    printmsg((const unsigned char*)h_rseed);
+      else if (strncmp_P(topic, PSTR("CHAIN"), 5) == 0)    printmsg((const unsigned char*)h_chain);
+      else if (strncmp_P(topic, PSTR("ECHAIN"), 6) == 0)   printmsg((const unsigned char*)h_echain);
+      else if (strncmp_P(topic, PSTR("ELIST"), 5) == 0)    printmsg((const unsigned char*)h_elist);
+      else if (strncmp_P(topic, PSTR("ELOAD"), 5) == 0)    printmsg((const unsigned char*)h_eload);
+      else if (strncmp_P(topic, PSTR("EFORMAT"), 7) == 0)  printmsg((const unsigned char*)h_eformat);
+      else if (strncmp_P(topic, PSTR("ESAVE"), 5) == 0)    printmsg((const unsigned char*)h_esave);
+      else if (strncmp_P(topic, PSTR("TONEW"), 5) == 0)    printmsg((const unsigned char*)h_tonew);
+      else if (strncmp_P(topic, PSTR("TONE"), 4) == 0)     printmsg((const unsigned char*)h_tone);
+      else if (strncmp_P(topic, PSTR("NOTONE"), 6) == 0)   printmsg((const unsigned char*)h_notone);
+      else if (strncmp_P(topic, PSTR("MODE"), 4) == 0)     printmsg((const unsigned char*)h_mode);
+      else if (strncmp_P(topic, PSTR("PEEK"), 4) == 0)     printmsg((const unsigned char*)h_peek);
+      else if (strncmp_P(topic, PSTR("ABS"), 3) == 0)      printmsg((const unsigned char*)h_abs);
+      else if (strncmp_P(topic, PSTR("AREAD"), 5) == 0)    printmsg((const unsigned char*)h_aread);
+      else if (strncmp_P(topic, PSTR("DREAD"), 5) == 0)    printmsg((const unsigned char*)h_dread);
+      else if (strncmp_P(topic, PSTR("RND"), 3) == 0)      printmsg((const unsigned char*)h_rnd);
+      else if (strncmp_P(topic, PSTR("INKEY"), 5) == 0)    printmsg((const unsigned char*)h_inkey);
+      else if (strncmp_P(topic, PSTR("CHR"), 3) == 0)      printmsg((const unsigned char*)h_chr);
+      
       else {
         printmsg((const unsigned char*)h_notFound);
       }
+      
+      goto run_next_statement;
     }
-    
-    goto run_next_statement;
-  }
 
   // --- Sound & Piezo Commands ---
   case KW_TONE:
@@ -1372,10 +1388,35 @@ interperateAtTxtpos:
 
   // --- Internal AVR EEPROM Commands ---
   case KW_EFORMAT:
-    for (int i = 0; i <= E2END; i++) {
-      EEPROM.write(i, 0);
+    {
+      currentKeypadMode = MODE_M;
+      printmsgNoNL((const unsigned char *)PSTR("FORMAT INT? (Y/N) "));
+      char choice = 0;
+      while(1) {
+        if (breakcheck()) { 
+          line_terminator(); 
+          printmsg(breakmsg); 
+          goto warmstart; 
+        }
+        
+        choice = checkInkey();
+        
+        if (choice == 'Y') {
+          outchar(choice);
+          line_terminator();
+          for (int i = 0; i <= E2END; i++) {
+            EEPROM.write(i, 0);
+          }
+          printmsg(formattedmsg);
+          break;
+        } else if (choice != 0) { // Any other key aborts
+          outchar(choice);
+          line_terminator();
+          printmsg((const unsigned char *)PSTR("ABORTED"));
+          break;
+        }
+      }
     }
-    printmsg(formattedmsg);
     goto warmstart;
 
   case KW_ESAVE:
