@@ -1,0 +1,8 @@
+10 CLS
+20 ?"----- EMBEE TWO -----":?"- SYSTEM DIAGNOTICS -":?"---------------------"
+30 ?"RAM TEST";:FOR N=1 TO 11:DELAY 300:?".";:NEXT N:?"OK":MEM
+40 ?"CPU SPEED:   MHZ";:FOR N=1 TO 8:DELAY 300:?AT5,11;N:NEXT N
+50 ?AT6,0;"TMR0: ";PEEK(70);"  ";:?AT6,11;"PORTB: ";PEEK(35)
+60 ?AT7,0;"SREG: ";PEEK(78);"  ";:?AT7,11;"WDTCSR: ";PEEK(96);
+70 GOTO 50
+

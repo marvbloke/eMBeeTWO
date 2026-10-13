@@ -313,6 +313,10 @@ Armed with \$150 in cash and saddled with a \$100 loan that gathers 10% interest
     660 IF K>57 GOTO 650
     670 Y=K-48:?AT 6,12;CHR(K):DELAY 999:RETURN
 
+
+
+More BASIC programs can be found in the 'examples' folder.
+
 ## Authors and Contributors
 
 - Tiny Basic 68k - Gordon Brandly [Project Page (via archive.org)](https://web.archive.org/web/20170306113457/http://members.shaw.ca:80/gbrandly/68ktinyb.html)
