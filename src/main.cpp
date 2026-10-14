@@ -1174,6 +1174,7 @@ interperateAtTxtpos:
     goto prompt;
 
   case KW_RUN:
+    memset(variables_begin, 0, 27 * VAR_SIZE);
     current_line = program_start;
     goto execline;
 
