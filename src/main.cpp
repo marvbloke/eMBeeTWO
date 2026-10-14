@@ -20,7 +20,7 @@
 // copies of the Software.
 ////////////////////////////////////////////////////////////////////////////////
 
-#define SIMULATOR_BUILD 1
+#define SIMULATOR_BUILD 0
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -2019,7 +2019,7 @@ void setup() {
   oled.begin(&Adafruit128x64, I2C_ADDRESS);
   oled.setFont(lcd5x7);
   oled.setScrollMode(SCROLL_MODE_AUTO);
-  setOledBrightness(10);
+  setOledBrightness(10); //usually 10
   oled.clear();
 
   initCapacitiveTouch(); // Calibrate baseline capacitance on boot
