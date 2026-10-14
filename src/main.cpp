@@ -1678,10 +1678,12 @@ inputagain:
     if(*txtpos == ':' ) {
       line_terminator();
       txtpos++;
+      oled.setInvertMode(false); // Reset INVERSE mode on statement exit
       goto run_next_statement;
     }
     if(*txtpos == NL) {
       line_terminator(); 
+      oled.setInvertMode(false); // Reset INVERSE mode on line exit
       goto execnextline;
     }
     while(1) {
@@ -1702,7 +1704,10 @@ inputagain:
 
         expression_error = 0;
         short int invVal = expression(); // Evaluate 0 or 1
-        if (expression_error) goto qwhat;
+        if (expression_error) {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
 
         oled.setInvertMode(invVal != 0); // Enable or disable inverted rendering!
 
@@ -1726,16 +1731,25 @@ inputagain:
         short int atY, atX;
         expression_error = 0;
         atY = expression(); // Row (0 to 7)
-        if (expression_error) goto qwhat;
+        if (expression_error) {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
 
         ignore_blanks();
-        if (*txtpos != ',') goto qwhat;
+        if (*txtpos != ',') {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
         txtpos++; // Consume ','
         ignore_blanks();
 
         expression_error = 0;
         atX = expression(); // Column (0 to 20)
-        if (expression_error) goto qwhat;
+        if (expression_error) {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
 
         // Clamp to screen bounds (8 rows x 21 cols)
         if (atY < 0) atY = 0;
@@ -1751,7 +1765,7 @@ inputagain:
           txtpos++;
         }
         if (*txtpos == NL || *txtpos == ':') break;
-        continue; // <-- FIX 1: Skip bottom checks and process the next item (e.g. "SCORE:")
+        continue; // Process the next item
       }
       else if(print_quoted_string()) { ; }
 
@@ -1760,26 +1774,41 @@ inputagain:
         if (*txtpos == '$') txtpos++; // Consume optional '$'
         ignore_blanks();
         
-        if (*txtpos != '(') goto qwhat;
+        if (*txtpos != '(') {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
         txtpos++; // Consume '('
         
         expression_error = 0;
         short int charVal = expression(); // Evaluate the math inside the brackets
-        if (expression_error) goto qwhat;
+        if (expression_error) {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
         
         ignore_blanks();
-        if (*txtpos != ')') goto qwhat;
+        if (*txtpos != ')') {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
         txtpos++; // Consume ')'
         
         outchar((unsigned char)charVal); // Print the raw ASCII character!
       }
 
-      else if(*txtpos == '"' || *txtpos == '\'') goto qwhat;
+      else if(*txtpos == '"' || *txtpos == '\'') {
+        oled.setInvertMode(false); // Reset on error
+        goto qwhat;
+      }
       else {
         short int e;
         expression_error = 0;
         e = expression();
-        if(expression_error) goto qwhat;
+        if(expression_error) {
+          oled.setInvertMode(false); // Reset on error
+          goto qwhat;
+        }
         printnum(e);
       }
 
@@ -1790,13 +1819,18 @@ inputagain:
         break;
       } 
       else if(*txtpos == ';') {
-        txtpos++; // <-- FIX 2: Properly consume intermediate semicolons!
+        txtpos++; // Consume intermediate semicolons
       }
       else if(*txtpos == NL || *txtpos == ':') {
         line_terminator();
         break;
-      } else goto qwhat;
+      } else {
+        oled.setInvertMode(false); // Reset on syntax error
+        goto qwhat;
+      }
     }
+
+    oled.setInvertMode(false); // Guarantee INVERSE mode is reset on statement completion
     goto run_next_statement;
 
   case KW_POKE:
