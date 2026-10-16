@@ -10,3 +10,4 @@
 100 PRINT N;" ";
 110 N = N + 2
 120 IF N > 0 GOTO 50
+130 RUN
