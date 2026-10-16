@@ -20,7 +20,7 @@
 // copies of the Software.
 ////////////////////////////////////////////////////////////////////////////////
 
-#define SIMULATOR_BUILD 0
+#define SIMULATOR_BUILD 1
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -28,11 +28,12 @@
 #include <SSD1306Ascii.h>
 #include <SSD1306AsciiWire.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 
 #define I2C_ADDRESS     0x3C
 #define EEPROM_I2C_ADDR 0x50
 #define SLOT_SIZE       1024
-#define kVersion        "V0.4"
+#define kVersion        "V1.0"
 #define kConsoleBaud    9600
 #define ASCII_EOF 0x04 // Ctrl+D / End of File
 
@@ -1169,9 +1170,11 @@ interperateAtTxtpos:
     goto run_next_statement;
 
   case KW_NEW:
-    if(txtpos[0] != NL) goto qwhat;
+    /*if(txtpos[0] != NL) goto qwhat;
     program_end = program_start;
-    goto prompt;
+    goto prompt;*/
+    wdt_enable(WDTO_15MS);
+    while (1) {}
 
   case KW_RUN:
     memset(variables_begin, 0, 27 * VAR_SIZE);

@@ -1,0 +1,23 @@
+10 S=0
+20 CLS:X=10:A=0:B=1:D=1:M=-1:I=-1:C=10:FOR Z=0 TO 19:@(Z)=1:IF Z-Z/4*4 @(20+Z)=1:?AT 6,Z;"-";
+30 NEXT Z:?AT 0,0;"S:";S;" H:";H;
+40 K=INKEY:X=X+(K=54)-(K=52):IF X<1 X=1
+50 IF X>19 X=19
+60 IF M<0 IF K=53 P=X:M=7
+70 IF M>0 ?AT M,P;" ";:M=M-1:IF M>0 ?AT M,P;"|";
+80 IF M=0 M=-1
+90 IF M=6 IF @(20+P) @(20+P)=0:?AT 6,P;" ";:M=-1
+100 F=P-A:IF F>=0 IF F<=4 Z=(M-B)*5+F:IF Z>=0 IF Z<=9 IF @(Z) @(Z)=0:C=C-1:?AT M,P;" ";:M=-1:S=S+10:?AT 0,2;S;
+110 IF RND(4) GOTO 150
+120 ?AT B,A;"     ";:?AT B+1,A;"     ";:A=A+D:IF (A<0)+(A>16) D=-D:B=B+1:A=A+D
+130 FOR Z=0 TO 9:IF @(Z) ?AT B+Z/5,A+Z-Z/5*5;"&";
+140 NEXT Z:IF B=6 GOTO 300
+145 IF C=0 GOTO 20
+150 IF I<0 Z=RND(10):IF @(Z) J=A+Z-Z/5*5:I=B
+160 IF I>0 ?AT I,J;" ";:I=I+1:IF I=6 IF @(20+J) @(20+J)=0:?AT 6,J;" ";:I=-1
+170 IF I>7 I=-1
+180 IF P=J IF M>0 IF I>0 IF (M=I)+(M=I-1) ?AT M,P;" ";:M=-1:I=-1
+185 IF I>0 ?AT I,J;"*";:IF I=7 IF J=X GOTO 300
+200 ?AT 7,X-1;" ^ ";:DELAY 60:GOTO 40
+300 IF S>H H=S
+310 ?AT 0,15;"OVER":DELAY 2000:GOTO 10
