@@ -20,7 +20,7 @@
 // copies of the Software.
 ////////////////////////////////////////////////////////////////////////////////
 
-#define SIMULATOR_BUILD 1
+#define SIMULATOR_BUILD 0
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -264,30 +264,36 @@ void playTone(unsigned int freq, unsigned int duration, boolean wait) {
 
 // --- 4x4 Capacitive Touch Matrix Hardware Driver ---
 const uint8_t rowPins[4] = {8, 9, 10, 11}; // PB0 - PB3 (Drive Rows)
-const uint8_t colPins[4] = {2, 3, 4, 5};   // PD2 - PD5 (Sense Cols)
+const uint8_t colPins[4] = {A0, A1, A2, A3}; // Analog Sense Cols (Moved from PD2-PD5)
 
-uint8_t touchBaseline[4][4];
-#define TOUCH_THRESHOLD 12 // Sensitivity delta threshold
+uint16_t touchBaseline[4][4];
+#define TOUCH_THRESHOLD 30
 
-uint8_t scanTouchCell(uint8_t r, uint8_t c) {
-  uint8_t cycles = 0;
+uint16_t scanTouchCell(uint8_t r, uint8_t c) {
   uint8_t rPin = rowPins[r];
-  uint8_t cPin = colPins[c];
+  uint8_t analogColPin = colPins[c];
+  
+  // 1. Drive the active row HIGH
+  pinMode(rPin, OUTPUT); 
+  digitalWrite(rPin, HIGH);
 
-  // Discharge lines
-  pinMode(rPin, OUTPUT); digitalWrite(rPin, LOW);
-  pinMode(cPin, OUTPUT); digitalWrite(cPin, LOW);
-  delayMicroseconds(5);
+  // 2. Discharge the external pad
+  pinMode(analogColPin, OUTPUT);
+  digitalWrite(analogColPin, LOW);
 
-  // Charge transfer pulse sequence
-  for (uint8_t i = 0; i < 16; i++) {
-    digitalWrite(rPin, HIGH);
-    pinMode(cPin, INPUT);
-    if (digitalRead(cPin) == HIGH) cycles++;
-    pinMode(cPin, OUTPUT);
-    digitalWrite(cPin, LOW);
-  }
-  return cycles;
+  // 3. Charge the internal S/H capacitor
+  analogRead(14); 
+  
+  // 4. Switch pad to input and connect ADC to share charge
+  pinMode(analogColPin, INPUT);
+  
+  // 5. Read the equalized voltage
+  uint16_t result = analogRead(analogColPin);
+
+  // Turn off the row
+  digitalWrite(rPin, LOW); 
+  
+  return result; 
 }
 
 void initCapacitiveTouch() {
@@ -341,7 +347,7 @@ bool scanKeypadInput(char &singleChar, const char* &outStr) {
 
   for (uint8_t r = 0; r < 4; r++) {
     for (uint8_t c = 0; c < 4; c++) {
-      uint8_t val = scanTouchCell(r, c);
+      uint16_t val = scanTouchCell(r, c);
       if (val > (touchBaseline[r][c] + TOUCH_THRESHOLD)) {
         delay(25); // Debounce
 
@@ -2012,6 +2018,8 @@ void setOledBrightness(uint8_t contrast) {
 }
 
 void setup() {
+  MCUSR = 0;
+  wdt_disable();
   Serial.begin(kConsoleBaud);
 
   // Allow OLED onboard charge pump extra time to stabilize
@@ -2048,8 +2056,8 @@ static unsigned char breakcheck(void) {
   }
 
   // 2. Check Capacitive Matrix Chord: MODE (Row 2, Col 3) + SPC (Row 3, Col 3)
-  uint8_t modeVal = scanTouchCell(2, 3);
-  uint8_t spcVal  = scanTouchCell(3, 3);
+  uint16_t modeVal = scanTouchCell(2, 3);
+  uint16_t spcVal  = scanTouchCell(3, 3);
 
   if ((modeVal > (touchBaseline[2][3] + TOUCH_THRESHOLD)) &&
       (spcVal  > (touchBaseline[3][3] + TOUCH_THRESHOLD))) {
@@ -2127,9 +2135,9 @@ static int inchar() {
       }
 
       // 3. Scan Capacitive Touch Matrix
-      // char keyChar = 0;
-      // const char* strOut = NULL;
-      /*if (scanKeypadInput(keyChar, strOut)) {
+      char keyChar = 0;
+      const char* strOut = NULL;
+      if (scanKeypadInput(keyChar, strOut)) {
         // Render active mode cursor [N, K, A, M, S] for touch input
         drawModeCursor(false);
         soundKeyClick(); // Fire keyclick audio feedback
@@ -2142,7 +2150,7 @@ static int inchar() {
         } 
         else if (keyChar != 0) {
           // Wait for release before registering single keypress
-          while (scanTouchCell(0,0) > 0) {
+          while (true) {
             char dummyChar; const char* dummyStr;
             if (!scanKeypadInput(dummyChar, dummyStr)) break;
             delay(10);
@@ -2150,7 +2158,7 @@ static int inchar() {
           if (keyChar >= 'a' && keyChar <= 'z') keyChar -= 32;
           return keyChar;
         }
-      }*/
+      }
     }
   }
 

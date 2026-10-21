@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eMBee BASIC</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden; /* Lock the outer window */
+        }
+        
+        #terminal {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #33ff00; /* Classic VT100 phosphor green */
+            font-family: monospace; /* Browser's default monospace */
+            white-space: pre; /* Exact character placement */
+            word-break: break-all;
+            overflow: hidden;
+            text-shadow: 0 0 4px rgba(51, 255, 0, 0.7); /* CRT Glow */
+            cursor: default;
+        }
+
+        .inv {
+            background-color: #33ff00;
+            color: #000;
+            text-shadow: none;
+        }
+
+        .cursor {
+            color: #33ff00;
+            background-color: #33ff00;
+            animation: blink 1s step-end infinite;
+        }
+        
+        .cursor.inv {
+            background-color: #000;
+            color: #000;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+
+    <script>
+        // --- 1. Terminal Hardware Emulation & Scaling ---
+        const terminalEl = document.getElementById('terminal');
+        let COLS = 40;
+        let ROWS = 25;
+        let screenBuffer = [];
+        let cursorX = 0;
+        let cursorY = 0;
+        let currentInverseMode = false;
+        let isCursorVisible = true;
+        let needsRender = true;
+        
+        function initBuffer(r, c) {
+            let newBuf = [];
+            for (let y = 0; y < r; y++) {
+                let row = [];
+                for (let x = 0; x < c; x++) {
+                    row.push({ ch: ' ', inv: false });
+                }
+                newBuf.push(row);
+            }
+            // Preserve old content if reshaping
+            let copyRows = Math.min(r, screenBuffer.length);
+            for (let y = 0; y < copyRows; y++) {
+                let copyCols = Math.min(c, screenBuffer[y].length);
+                for (let x = 0; x < copyCols; x++) {
+                    newBuf[y][x] = screenBuffer[y][x];
+                }
+            }
+            screenBuffer = newBuf;
+        }
+
+        function resizeTerminal() {
+            const isLandscape = window.innerWidth > window.innerHeight;
+            COLS = isLandscape ? 80 : 40;
+            
+            const testDiv = document.createElement('div');
+            testDiv.style.fontFamily = 'monospace';
+            testDiv.style.fontSize = '100px';
+            testDiv.style.lineHeight = '1';
+            testDiv.style.position = 'absolute';
+            testDiv.style.visibility = 'hidden';
+            testDiv.style.whiteSpace = 'pre';
+            testDiv.style.padding = '0';
+            testDiv.style.margin = '0';
+            testDiv.textContent = 'X'.repeat(COLS);
+            document.body.appendChild(testDiv);
+            
+            const totalWidth = testDiv.getBoundingClientRect().width;
+            const charHeight = testDiv.getBoundingClientRect().height;
+            document.body.removeChild(testDiv);
+            
+            const scaleFactor = window.innerWidth / totalWidth;
+            const newFontSize = 100 * scaleFactor;
+            
+            const naturalRowHeight = charHeight * scaleFactor;
+            ROWS = Math.floor(window.innerHeight / naturalRowHeight);
+            const fittedLineHeight = window.innerHeight / ROWS;
+            
+            terminalEl.style.fontSize = (newFontSize * 0.99) + 'px';
+            terminalEl.style.lineHeight = fittedLineHeight + 'px';
+            
+            initBuffer(ROWS, COLS);
+            if (cursorX >= COLS) cursorX = COLS - 1;
+            if (cursorY >= ROWS) cursorY = ROWS - 1;
+            needsRender = true;
+        }
+
+        window.addEventListener('resize', resizeTerminal);
+        resizeTerminal(); // Run once on load
+
+        function scrollScreen() {
+            for (let y = 1; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    screenBuffer[y - 1][x] = { ...screenBuffer[y][x] };
+                }
+            }
+            for (let x = 0; x < COLS; x++) {
+                screenBuffer[ROWS - 1][x] = { ch: ' ', inv: false };
+            }
+        }
+
+        function writeChar(c) {
+            if (c === '\n') {
+                cursorX = 0;
+                cursorY++;
+                currentInverseMode = false;
+            } else if (c === '\b') {
+                if (cursorX > 0) {
+                    cursorX--;
+                } else if (cursorY > 0) {
+                    cursorY--;
+                    cursorX = COLS - 1;
+                }
+                screenBuffer[cursorY][cursorX] = { ch: ' ', inv: false };
+            } else {
+                if (cursorX >= COLS) {
+                    cursorX = 0;
+                    cursorY++;
+                }
+                if (cursorY >= ROWS) {
+                    scrollScreen();
+                    cursorY = ROWS - 1;
+                }
+                screenBuffer[cursorY][cursorX] = { ch: c, inv: currentInverseMode };
+                cursorX++;
+            }
+            
+            if (cursorX >= COLS) {
+                cursorX = 0;
+                cursorY++;
+            }
+            if (cursorY >= ROWS) {
+                scrollScreen();
+                cursorY = ROWS - 1;
+            }
+            needsRender = true;
+        }
+
+        function printString(str) {
+            for (let i = 0; i < str.length; i++) writeChar(str[i]);
+        }
+
+        function render() {
+            if (needsRender) {
+                let html = '';
+                for (let y = 0; y < ROWS; y++) {
+                    let activeInv = false;
+                    let spanOpen = false;
+                    
+                    for (let x = 0; x < COLS; x++) {
+                        let cell = screenBuffer[y][x];
+                        let isCursor = (y === cursorY && x === cursorX) && isCursorVisible;
+                        
+                        let displayInv = cell.inv;
+                        let extraClass = isCursor ? " cursor" : "";
+                        if (isCursor && displayInv) extraClass += " inv"; 
+                        
+                        if (isCursor || displayInv !== activeInv) {
+                            if (spanOpen) { html += '</span>'; spanOpen = false; }
+                            if (displayInv || isCursor) {
+                                html += `<span class="${displayInv ? 'inv' : ''}${extraClass}">`;
+                                spanOpen = true;
+                            }
+                            activeInv = displayInv;
+                        }
+                        
+                        let ch = cell.ch;
+                        if (ch === '<') ch = '&lt;';
+                        else if (ch === '>') ch = '&gt;';
+                        else if (ch === '&') ch = '&amp;';
+                        else if (isCursor && ch === ' ') ch = '&#9608;'; // Solid block for cursor
+                        
+                        html += ch;
+                        
+                        if (isCursor) {
+                            html += '</span>';
+                            spanOpen = false;
+                            activeInv = false;
+                        }
+                    }
+                    if (spanOpen) html += '</span>';
+                    html += '\n';
+                }
+                terminalEl.innerHTML = html;
+                needsRender = false;
+            }
+            requestAnimationFrame(render);
+        }
+        requestAnimationFrame(render);
+
+        // --- 2. BASIC Memory & Architecture ---
+        const RAM_SIZE = 1024;
+        const ram = new Uint8Array(RAM_SIZE);
+        const vars = new Int16Array(26); // A-Z variables
+
+        function getVar(charName) { return vars[charName.charCodeAt(0) - 65]; }
+        function setVar(charName, val) { vars[charName.charCodeAt(0) - 65] = val; }
+
+        let program = []; // { line: number, text: string }
+        let callStack = []; // for FOR/NEXT and GOSUB/RETURN
+        let isRunning = false;
+        let breakFlag = false;
+        
+        let inkeyQueue = [];
+        let inputResolve = null;
+        let inputBuffer = "";
+        let isWaitingForInput = false;
+
+        function getFreeRAM() {
+            let used = 0;
+            for (let l of program) used += 4 + l.text.length; // Approximate line structure
+            return RAM_SIZE - used;
+        }
+
+        // --- 3. Keyboard Controller & Paste (Native Friendly) ---
+        window.addEventListener('keydown', (e) => {
+            // Guardrail Requirement 3: Allow native shortcuts, only trap Ctrl+C explicitly
+            if (e.metaKey || e.altKey || (e.ctrlKey && e.key.toLowerCase() !== 'c')) return;
+
+            if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+                breakFlag = true;
+                if (isWaitingForInput) {
+                    printString("^C\nBREAK!\n>");
+                    inputBuffer = "";
+                    let res = inputResolve;
+                    inputResolve = null;
+                    isWaitingForInput = false;
+                    if(res) res(null);
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (e.ctrlKey) return;
+
+            let char = e.key;
+            if (char.length === 1) {
+                char = char.toUpperCase();
+                if (isRunning && !isWaitingForInput) {
+                    inkeyQueue.push(char.charCodeAt(0));
+                } else if (isWaitingForInput || !isRunning) {
+                    inputBuffer += char;
+                    writeChar(char);
+                }
+            } else if (char === 'Enter') {
+                if (isWaitingForInput || !isRunning) {
+                    writeChar('\n');
+                    let resVal = inputBuffer;
+                    inputBuffer = "";
+                    
+                    if (isWaitingForInput) {
+                        let res = inputResolve;
+                        inputResolve = null;
+                        isWaitingForInput = false;
+                        if(res) res(resVal);
+                    } else {
+                        processDirectCommand(resVal);
+                    }
+                }
+            } else if (char === 'Backspace') {
+                if (inputBuffer.length > 0) {
+                    inputBuffer = inputBuffer.slice(0, -1);
+                    writeChar('\b');
+                }
+            }
+            e.preventDefault(); // Only prevent default for normal typing characters
+        });
+
+        window.addEventListener('paste', async (e) => {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            let chars = text.split('');
+            for (let i = 0; i < chars.length; i++) {
+                let char = chars[i];
+                if (char === '\n' || char === '\r') {
+                    if (char === '\r' && i + 1 < chars.length && chars[i+1] === '\n') continue;
+                    
+                    if (isWaitingForInput || !isRunning) {
+                        writeChar('\n');
+                        let resVal = inputBuffer;
+                        inputBuffer = "";
+                        
+                        if (isWaitingForInput) {
+                            let res = inputResolve;
+                            inputResolve = null;
+                            isWaitingForInput = false;
+                            if(res) res(resVal);
+                            await sleep(10); // Yield for BASIC engine
+                        } else {
+                            await processDirectCommand(resVal);
+                        }
+                    }
+                } else {
+                    char = char.toUpperCase();
+                    if (isRunning && !isWaitingForInput) {
+                        inkeyQueue.push(char.charCodeAt(0));
+                    } else if (isWaitingForInput || !isRunning) {
+                        inputBuffer += char;
+                        writeChar(char);
+                    }
+                }
+            }
+        });
+
+        // --- 4. The Parser Engine ---
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        class Parser {
+            constructor(text, pos = 0) { this.text = text; this.pos = pos; this.err = null; }
+            peek() { return this.text[this.pos]; }
+            consume() { return this.text[this.pos++]; }
+            eof() { return this.pos >= this.text.length; }
+            skipWS() { while (this.peek() === ' ' || this.peek() === '\t') this.pos++; }
+            
+            match(str) {
+                this.skipWS();
+                if (this.text.substring(this.pos, this.pos + str.length).toUpperCase() === str) {
+                    this.pos += str.length;
+                    return true;
+                }
+                return false;
+            }
+
+            getVarName() {
+                this.skipWS();
+                let c = this.peek();
+                if (c >= 'A' && c <= 'Z') {
+                    this.pos++;
+                    return c;
+                }
+                return null;
+            }
+
+            expr() {
+                let a = this.expr2();
+                if (this.err) return a;
+                this.skipWS();
+                if (this.match('>=')) return a >= this.expr2() ? 1 : 0;
+                if (this.match('<>') || this.match('!=')) return a !== this.expr2() ? 1 : 0;
+                if (this.match('>')) return a > this.expr2() ? 1 : 0;
+                if (this.match('=')) return a === this.expr2() ? 1 : 0;
+                if (this.match('<=')) return a <= this.expr2() ? 1 : 0;
+                if (this.match('<')) return a < this.expr2() ? 1 : 0;
+                return a;
+            }
+
+            expr2() {
+                let a;
+                this.skipWS();
+                if (this.match('-')) a = -this.expr3();
+                else if (this.match('+')) a = this.expr3();
+                else a = this.expr3();
+
+                while (!this.eof()) {
+                    let savedPos = this.pos;
+                    this.skipWS();
+                    if (this.match('-')) a -= this.expr3();
+                    else if (this.match('+')) a += this.expr3();
+                    else { this.pos = savedPos; return a; }
+                }
+                return a;
+            }
+
+            expr3() {
+                let a = this.expr4();
+                while (!this.eof()) {
+                    let savedPos = this.pos;
+                    this.skipWS();
+                    if (this.match('*')) a *= this.expr4();
+                    else if (this.match('/')) {
+                        let b = this.expr4();
+                        if (b !== 0) a = Math.trunc(a / b);
+                        else { this.err = "HOW?"; return 0; }
+                    } else { this.pos = savedPos; return a; }
+                }
+                return a;
+            }
+
+            expr4() {
+                this.skipWS();
+                
+                // Numbers
+                if (this.peek() >= '0' && this.peek() <= '9') {
+                    let num = 0;
+                    while (!this.eof() && this.peek() >= '0' && this.peek() <= '9') {
+                        num = num * 10 + parseInt(this.consume());
+                    }
+                    return num;
+                }
+                
+                // Downward array mapping @(expr)
+                if (this.match('@')) {
+                    this.skipWS();
+                    if (!this.match('(')) { this.err = "WHAT?"; return 0; }
+                    let idx = this.expr();
+                    if (!this.match(')')) { this.err = "WHAT?"; return 0; }
+                    if (idx < 0 || idx >= getFreeRAM()) { this.err = "SORRY!"; return 0; }
+                    return ram[RAM_SIZE - 1 - idx];
+                }
+                
+                // Functions
+                if (this.match('RND')) {
+                    if (!this.match('(')) { this.err = "WHAT?"; return 0; }
+                    let a = this.expr();
+                    if (!this.match(')')) { this.err = "WHAT?"; return 0; }
+                    return Math.floor(Math.random() * a);
+                }
+                if (this.match('ABS')) {
+                    if (!this.match('(')) { this.err = "WHAT?"; return 0; }
+                    let a = this.expr();
+                    if (!this.match(')')) { this.err = "WHAT?"; return 0; }
+                    return Math.abs(a);
+                }
+                if (this.match('PEEK')) {
+                    if (!this.match('(')) { this.err = "WHAT?"; return 0; }
+                    let a = this.expr();
+                    if (!this.match(')')) { this.err = "WHAT?"; return 0; }
+                    return (a >= 0 && a < RAM_SIZE) ? ram[a] : 0;
+                }
+                if (this.match('AREAD') || this.match('DREAD') || this.match('MODE')) {
+                    if (this.match('(')) { this.expr(); this.match(')'); } // Consume args
+                    return 0; // Hardware stubs for Emulator
+                }
+                if (this.match('INKEY')) {
+                    return inkeyQueue.length > 0 ? inkeyQueue.shift() : 0;
+                }
+                
+                // Variables A-Z
+                let p = this.peek();
+                if (p >= 'A' && p <= 'Z') {
+                    this.consume();
+                    return getVar(p);
+                }
+                
+                // Parentheses
+                if (this.match('(')) {
+                    let a = this.expr();
+                    if (!this.match(')')) { this.err = "WHAT?"; return 0; }
+                    return a;
+                }
+                
+                this.err = "WHAT?";
+                return 0;
+            }
+        }
+
+        // --- 5. Instruction Execution ---
+        async function executeStatement(p) {
+            p.skipWS();
+            if (p.eof()) return { action: 'NEXT' };
+
+            // Storage / File Commands
+            if (p.match('FORMAT')) {
+                for (let i = 1; i <= 32; i++) localStorage.removeItem('embee_slot_' + i);
+                printString("EEPROM FORMATTED\n");
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('FILES')) {
+                printString("SLOTS 1-32:\n");
+                for (let i = 1; i <= 32; i++) {
+                    let hasData = localStorage.getItem('embee_slot_' + i);
+                    let str = hasData ? i.toString() : "..";
+                    printString(str.padStart(2, ' ') + " ");
+                    if (i % 6 === 0) printString("\n");
+                }
+                printString("\n");
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('SAVE')) {
+                let slot = p.expr();
+                if (p.err || slot < 1 || slot > 32) return { action: 'ERROR', msg: "HOW?" };
+                let str = program.map(l => `${l.line} ${l.text}`).join('\n');
+                localStorage.setItem('embee_slot_' + slot, str);
+                printString(`SLOT ${slot} SAVED\n`);
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('LOAD') || p.match('CHAIN')) {
+                let isChain = p.text.toUpperCase().includes('CHAIN');
+                let slot = p.expr();
+                if (p.err || slot < 1 || slot > 32) return { action: 'ERROR', msg: "HOW?" };
+                let str = localStorage.getItem('embee_slot_' + slot);
+                program = [];
+                if (str) {
+                    str.split('\n').forEach(lineStr => {
+                        let fs = lineStr.indexOf(' ');
+                        if (fs > -1) program.push({ line: parseInt(lineStr.substring(0, fs)), text: lineStr.substring(fs + 1) });
+                    });
+                }
+                if (isChain) return { action: 'RUN' };
+                printString(`SLOT ${slot} LOADED\n`);
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            // Standard Commands
+            if (p.match('NEW')) { return { action: 'NEW' }; }
+            if (p.match('LIST')) {
+                let start = 0, end = 0xFFFF;
+                if (!p.eof() && p.peek() !== ':') {
+                    start = p.expr();
+                    if (p.match(',')) end = p.expr();
+                }
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                for (let l of program) {
+                    if (l.line >= start && l.line <= end) printString(`${l.line} ${l.text}\n`);
+                }
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('RUN')) return { action: 'RUN' };
+            if (p.match('CLS')) {
+                for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) screenBuffer[y][x] = { ch: ' ', inv: false };
+                cursorX = 0; cursorY = 0; needsRender = true;
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('MEM')) {
+                printString(getFreeRAM() + " BYTES RAM\n");
+                p.match(':'); return { action: 'NEXT' };
+            }
+            if (p.match('DELAY')) {
+                let ms = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                await sleep(ms);
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            // Hardware Stubs
+            if (p.match('TONEW') || p.match('TONE') || p.match('NOTONE') || p.match('MODE') || 
+                p.match('AWRITE') || p.match('DWRITE') || p.match('RSEED')) {
+                p.expr(); // consume arg 1
+                if (p.match(',')) p.expr(); // consume arg 2
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            if (p.match('POKE')) {
+                let addr = p.expr();
+                if (!p.match(',')) return { action: 'ERROR', msg: "WHAT?" };
+                let val = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                if (addr >= 0 && addr < RAM_SIZE) ram[addr] = val & 0xFF;
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            // PRINT
+            if (p.match('PRINT') || p.match('?')) {
+                let newline = true;
+                while (!p.eof() && p.peek() !== ':') {
+                    p.skipWS();
+                    if (p.match('INV') || p.match('INVERSE')) {
+                        if(p.match('ERSE')){} // optional tail
+                        let val = p.expr();
+                        if (p.err) return { action: 'ERROR', msg: p.err };
+                        currentInverseMode = (val !== 0);
+                        if (p.peek() === ';' || p.peek() === ',') p.consume();
+                        continue;
+                    }
+                    if (p.match('AT')) {
+                        let y = p.expr();
+                        if (!p.match(',')) return { action: 'ERROR', msg: "WHAT?" };
+                        let x = p.expr();
+                        if (p.err) return { action: 'ERROR', msg: p.err };
+                        cursorY = Math.max(0, Math.min(y, ROWS - 1));
+                        cursorX = Math.max(0, Math.min(x, COLS - 1));
+                        if (p.peek() === ';' || p.peek() === ',') p.consume();
+                        continue;
+                    }
+                    if (p.match('CHR$') || p.match('CHR')) {
+                        if (p.match('(')) {
+                            let a = p.expr();
+                            if (p.match(')')) printString(String.fromCharCode(a));
+                        }
+                    } else if (p.peek() === '"' || p.peek() === "'") {
+                        let delim = p.consume();
+                        let str = "";
+                        while (!p.eof() && p.peek() !== delim) str += p.consume();
+                        if (p.peek() === delim) p.consume();
+                        printString(str);
+                    } else {
+                        let a = p.expr();
+                        if (p.err) {
+                            currentInverseMode = false;
+                            return { action: 'ERROR', msg: p.err };
+                        }
+                        printString(a.toString());
+                    }
+                    
+                    p.skipWS();
+                    if (p.match(',')) { newline = false; printString("  "); } // Basic tab spacing
+                    else if (p.match(';')) { newline = false; }
+                    else break;
+                }
+                if (newline) printString("\n");
+                currentInverseMode = false;
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            if (p.match('IF')) {
+                let cond = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                if (cond === 0) { p.pos = p.text.length; } // skip rest of line
+                return { action: 'NEXT' };
+            }
+            if (p.match('GOTO')) {
+                let target = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                return { action: 'GOTO', target };
+            }
+            if (p.match('GOSUB')) {
+                let target = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                if (p.match(':')) p.pos--; 
+                return { action: 'GOSUB', target };
+            }
+            if (p.match('RETURN')) return { action: 'RETURN' };
+            if (p.match('END') || p.match('STOP')) return { action: 'END' };
+            if (p.match('REM') || p.match("'")) { p.pos = p.text.length; return { action: 'NEXT' }; }
+            
+            if (p.match('FOR')) {
+                let v = p.getVarName();
+                if (!v || !p.match('=')) return { action: 'ERROR', msg: "WHAT?" };
+                let start = p.expr();
+                if (!p.match('TO')) return { action: 'ERROR', msg: "WHAT?" };
+                let limit = p.expr();
+                let step = p.match('STEP') ? p.expr() : 1;
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                
+                setVar(v, start);
+                callStack.push({ type: 'FOR', varName: v, limit, step, lineIndex: null, pos: p.pos });
+                p.match(':');
+                return { action: 'NEXT' };
+            }
+            
+            if (p.match('NEXT')) {
+                let v = p.getVarName();
+                if (!v) return { action: 'ERROR', msg: "WHAT?" };
+                let idx = callStack.findLastIndex(f => f.type === 'FOR' && f.varName === v);
+                if (idx === -1) return { action: 'ERROR', msg: "HOW?" };
+                
+                let f = callStack[idx];
+                setVar(v, getVar(v) + f.step);
+                let val = getVar(v);
+                let done = (f.step > 0 && val > f.limit) || (f.step < 0 && val < f.limit);
+                
+                if (!done) {
+                    return { action: 'LOOP', targetLineIdx: f.lineIndex, targetPos: f.pos };
+                } else {
+                    callStack.splice(idx);
+                    p.match(':'); return { action: 'NEXT' };
+                }
+            }
+            
+            if (p.match('INPUT')) {
+                let v = p.getVarName();
+                if (!v) return { action: 'ERROR', msg: "WHAT?" };
+                
+                while (true) {
+                    isWaitingForInput = true;
+                    isCursorVisible = true;
+                    needsRender = true;
+                    let raw = await new Promise(r => { inputResolve = r; });
+                    isCursorVisible = false;
+                    needsRender = true;
+                    if (raw === null) return { action: 'END' }; // Ctrl+C
+                    let num = parseInt(raw);
+                    if (!isNaN(num)) {
+                        setVar(v, num);
+                        break;
+                    }
+                    printString("WHAT?\n");
+                }
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            // Variable Assignment (LET optional)
+            if (p.match('LET')) p.skipWS();
+            if (p.match('@')) {
+                if (!p.match('(')) return { action: 'ERROR', msg: "WHAT?" };
+                let idx = p.expr();
+                if (!p.match(')')) return { action: 'ERROR', msg: "WHAT?" };
+                if (!p.match('=')) return { action: 'ERROR', msg: "WHAT?" };
+                let val = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                
+                if (idx < 0 || idx >= getFreeRAM()) return { action: 'ERROR', msg: "SORRY!" };
+                ram[RAM_SIZE - 1 - idx] = val & 0xFF;
+                p.match(':'); return { action: 'NEXT' };
+            } 
+            
+            let vName = p.getVarName();
+            if (vName && p.match('=')) {
+                let val = p.expr();
+                if (p.err) return { action: 'ERROR', msg: p.err };
+                setVar(vName, val);
+                p.match(':'); return { action: 'NEXT' };
+            }
+
+            return { action: 'ERROR', msg: "WHAT?" };
+        }
+
+        // --- 6. Runtime Loop ---
+        async function runProgram() {
+            isRunning = true;
+            isCursorVisible = false;
+            needsRender = true;
+            breakFlag = false;
+            inkeyQueue = [];
+            callStack = [];
+            vars.fill(0);
+            
+            let pcIdx = 0;
+            let pcPos = 0;
+            let instCount = 0;
+            
+            while (isRunning && pcIdx < program.length) {
+                if (breakFlag) { printString("BREAK!\n"); break; }
+
+                let line = program[pcIdx];
+                let p = new Parser(line.text, pcPos);
+                
+                if (callStack.length > 0) {
+                    let lastFrame = callStack[callStack.length-1];
+                    if (lastFrame.type === 'FOR' && lastFrame.lineIndex === null) {
+                        lastFrame.lineIndex = pcIdx;
+                    }
+                }
+
+                let res = await executeStatement(p);
+
+                if (res.action === 'GOTO') {
+                    let targetIdx = program.findIndex(l => l.line === res.target);
+                    if (targetIdx === -1) { printString("HOW?\n"); break; }
+                    pcIdx = targetIdx; pcPos = 0;
+                } else if (res.action === 'GOSUB') {
+                    callStack.push({ type: 'GOSUB', lineIndex: pcIdx, pos: p.pos });
+                    let targetIdx = program.findIndex(l => l.line === res.target);
+                    if (targetIdx === -1) { printString("HOW?\n"); break; }
+                    pcIdx = targetIdx; pcPos = 0;
+                } else if (res.action === 'RETURN') {
+                    let f = null;
+                    while (callStack.length > 0) {
+                        f = callStack.pop();
+                        if (f.type === 'GOSUB') break;
+                    }
+                    if (!f || f.type !== 'GOSUB') { printString("HOW?\n"); break; }
+                    pcIdx = f.lineIndex; pcPos = f.pos;
+                } else if (res.action === 'LOOP') {
+                    pcIdx = res.targetLineIdx; pcPos = res.targetPos;
+                } else if (res.action === 'NEW') {
+                    program = [];
+                    vars.fill(0);
+                    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) screenBuffer[y][x] = { ch: ' ', inv: false };
+                    cursorX = 0; cursorY = 0; needsRender = true;
+                    printString("EMBEE TWO V1.0\n" + getFreeRAM() + " BYTES RAM\n");
+                    break;
+                } else if (res.action === 'END') {
+                    break;
+                } else if (res.action === 'ERROR') {
+                    printString(res.msg + "\n");
+                    break;
+                } else {
+                    if (p.eof()) { pcIdx++; pcPos = 0; }
+                    else pcPos = p.pos;
+                }
+
+                if (++instCount % 20 === 0) await sleep(0); // Yield to render frame
+            }
+            isRunning = false;
+            isCursorVisible = true;
+            needsRender = true;
+            printString(">"); 
+        }
+
+        async function processDirectCommand(rawLine) {
+            rawLine = rawLine.trim();
+            if (rawLine === "") { printString(">"); return; }
+            
+            let match = rawLine.match(/^(\d+)(.*)/);
+            if (match) {
+                let lineNum = parseInt(match[1]);
+                let code = match[2].trim();
+                
+                let existingIdx = program.findIndex(l => l.line === lineNum);
+                if (existingIdx > -1) program.splice(existingIdx, 1);
+                
+                if (code !== "") {
+                    program.push({ line: lineNum, text: code });
+                    program.sort((a, b) => a.line - b.line);
+                    
+                    if (getFreeRAM() < 0) {
+                        program.splice(program.findIndex(l => l.line === lineNum), 1);
+                        printString("SORRY!\n");
+                    }
+                }
+                printString(">");
+            } else {
+                breakFlag = false;
+                let p = new Parser(rawLine, 0);
+                while (!p.eof()) {
+                    let res = await executeStatement(p);
+                    if (res.action === 'RUN') {
+                        await runProgram();
+                        return; // runProgram prints the prompt
+                    }
+                    if (res.action === 'NEW') {
+                        program = [];
+                        vars.fill(0);
+                        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) screenBuffer[y][x] = { ch: ' ', inv: false };
+                        cursorX = 0; cursorY = 0; needsRender = true;
+                        printString("EMBEE TWO V1.0\n" + getFreeRAM() + " BYTES RAM\n");
+                        break;
+                    }
+                    if (res.action === 'ERROR') { printString(res.msg + "\n"); break; }
+                    if (res.action === 'END') break;
+                    if (['GOTO', 'GOSUB', 'RETURN', 'LOOP'].includes(res.action)) {
+                        printString("HOW?\n");
+                        break;
+                    }
+                }
+                printString(">");
+            }
+        }
+
+        // Boot Sequence
+        printString("EMBEE TWO V1.0\n" + getFreeRAM() + " BYTES RAM\n>");
+
+    </script>
+</body>
+</html>
